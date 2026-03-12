@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>KawaiiDB — Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #070B14; }
+    svg { display: block; width: 100%; height: auto; }
+    .screen-label {
+      background: #111827;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid #1E2D45;
+      border-bottom: 1px solid #1E2D45;
+    }
+    .screen-label .dot { width: 6px; height: 6px; border-radius: 50%; background: #2DD4BF; }
+    .screen-label span { color: #8B949E; font-size: 11px; letter-spacing: 0.08em; font-family: 'Outfit', sans-serif; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- SCREEN 1 — CONNECTION MANAGER                                 -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 1 — CONNECTION MANAGER</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR h=44 ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <!-- Nav tabs -->
+  <text x="200" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">Connections</text>
+  <rect x="200" y="41" width="82" height="2" fill="#2DD4BF"/>
+  <text x="310" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Navigator</text>
+  <text x="400" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">AI Analyze</text>
+  <!-- New Connection button -->
+  <rect x="1430" y="10" width="150" height="24" rx="5" fill="#2DD4BF"/>
+  <text x="1505" y="26" fill="#070B14" font-size="11" font-weight="600" text-anchor="middle" class="ui">+ New Connection</text>
+
+  <!-- ── TOOLBAR h=44 ── -->
+  <rect x="0" y="44" width="1600" height="44" fill="#0D1117"/>
+  <rect x="0" y="87" width="1600" height="1" fill="#1E2D45"/>
+  <!-- Search -->
+  <rect x="260" y="54" width="280" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="274" y="72" fill="#4A5568" font-size="11" class="ui">Search connections...</text>
+  <!-- Filter pills -->
+  <rect x="560" y="56" width="36" height="22" rx="9" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="578" y="71" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">All</text>
+  <rect x="606" y="56" width="54" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="633" y="71" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">MySQL</text>
+  <rect x="670" y="56" width="78" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="709" y="71" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">PostgreSQL</text>
+  <rect x="758" y="56" width="70" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="793" y="71" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">MongoDB</text>
+  <rect x="838" y="56" width="54" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="865" y="71" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">SQLite</text>
+
+  <!-- ── LEFT SIDEBAR w=240 ── -->
+  <rect x="0" y="88" width="240" height="892" fill="#111827"/>
+  <rect x="240" y="88" width="1" height="892" fill="#1E2D45"/>
+  <!-- Panel header -->
+  <rect x="0" y="88" width="3" height="36" fill="#2DD4BF"/>
+  <rect x="0" y="123" width="240" height="1" fill="#1E2D45"/>
+  <text x="14" y="111" fill="#E6EDF3" font-size="11" font-weight="700" letter-spacing="1" class="ui">CONNECTIONS</text>
+  <rect x="200" y="100" width="24" height="16" rx="8" fill="#2DD4BF18"/>
+  <text x="212" y="112" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">6</text>
+
+  <!-- All Connections (active) -->
+  <rect x="0" y="124" width="240" height="32" fill="#1C2333"/>
+  <rect x="0" y="124" width="3" height="32" fill="#2DD4BF"/>
+  <text x="16" y="144" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">All Connections</text>
+  <text x="218" y="144" fill="#8B949E" font-size="10" text-anchor="end" class="ui">6</text>
+  <!-- Favorites -->
+  <rect x="0" y="156" width="240" height="32" fill="#111827"/>
+  <text x="16" y="176" fill="#8B949E" font-size="12" class="ui">★ Favorites</text>
+  <text x="218" y="176" fill="#4A5568" font-size="10" text-anchor="end" class="ui">2</text>
+  <!-- Recent -->
+  <rect x="0" y="188" width="240" height="32" fill="#111827"/>
+  <text x="16" y="208" fill="#8B949E" font-size="12" class="ui">◷ Recent</text>
+  <text x="218" y="208" fill="#4A5568" font-size="10" text-anchor="end" class="ui">3</text>
+
+  <rect x="10" y="228" width="220" height="1" fill="#1E2D45"/>
+  <text x="14" y="250" fill="#4A5568" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">BY TYPE</text>
+
+  <!-- MySQL -->
+  <rect x="0" y="258" width="240" height="30" fill="#111827"/>
+  <circle cx="20" cy="273" r="4" fill="#4F9EFF"/>
+  <text x="32" y="277" fill="#8B949E" font-size="12" class="ui">MySQL</text>
+  <text x="218" y="277" fill="#4A5568" font-size="10" text-anchor="end" class="ui">2</text>
+  <!-- PostgreSQL -->
+  <rect x="0" y="288" width="240" height="30" fill="#111827"/>
+  <circle cx="20" cy="303" r="4" fill="#3FB950"/>
+  <text x="32" y="307" fill="#8B949E" font-size="12" class="ui">PostgreSQL</text>
+  <text x="218" y="307" fill="#4A5568" font-size="10" text-anchor="end" class="ui">2</text>
+  <!-- MongoDB -->
+  <rect x="0" y="318" width="240" height="30" fill="#111827"/>
+  <circle cx="20" cy="333" r="4" fill="#F5A623"/>
+  <text x="32" y="337" fill="#8B949E" font-size="12" class="ui">MongoDB</text>
+  <text x="218" y="337" fill="#4A5568" font-size="10" text-anchor="end" class="ui">1</text>
+  <!-- SQLite -->
+  <rect x="0" y="348" width="240" height="30" fill="#111827"/>
+  <circle cx="20" cy="363" r="4" fill="#BC8CFF"/>
+  <text x="32" y="367" fill="#8B949E" font-size="12" class="ui">SQLite</text>
+  <text x="218" y="367" fill="#4A5568" font-size="10" text-anchor="end" class="ui">1</text>
+
+  <rect x="10" y="388" width="220" height="1" fill="#1E2D45"/>
+  <text x="14" y="410" fill="#4A5568" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">FOLDERS</text>
+  <text x="16" y="436" fill="#8B949E" font-size="12" class="ui">📁 Production</text>
+  <text x="16" y="462" fill="#8B949E" font-size="12" class="ui">📁 Staging</text>
+  <text x="16" y="488" fill="#8B949E" font-size="12" class="ui">📁 Local Dev</text>
+
+  <!-- ── MAIN CONTENT — Connection Cards ── -->
+  <!-- Panel header -->
+  <rect x="241" y="88" width="3" height="36" fill="#2DD4BF"/>
+  <text x="258" y="111" fill="#E6EDF3" font-size="11" font-weight="700" letter-spacing="1" class="ui">ALL CONNECTIONS</text>
+  <text x="1570" y="111" fill="#4A5568" font-size="10" text-anchor="end" class="ui">6 connections</text>
+  <rect x="241" y="123" width="1359" height="1" fill="#1E2D45"/>
+
+  <!-- Card 1: prod-main-db (MySQL, Connected) -->
+  <rect x="265" y="138" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="265" y="138" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="265" y="176" width="360" height="10" fill="#111827"/>
+  <circle cx="289" cy="162" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="289" y="167" fill="#4F9EFF" font-size="10" font-weight="700" text-anchor="middle" class="mono">My</text>
+  <text x="312" y="158" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">prod-main-db</text>
+  <text x="312" y="173" fill="#8B949E" font-size="10" class="ui">MySQL 8.0</text>
+  <!-- Status badge -->
+  <rect x="555" y="150" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95040" stroke-width="1"/>
+  <circle cx="565" cy="159" r="3" fill="#3FB950"/>
+  <text x="593" y="163" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Online</text>
+  <!-- Card body -->
+  <text x="281" y="204" fill="#4A5568" font-size="10" class="ui">Host</text>
+  <text x="340" y="204" fill="#E6EDF3" font-size="11" class="mono">db.prod.internal:3306</text>
+  <text x="281" y="222" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="340" y="222" fill="#E6EDF3" font-size="11" class="mono">ecommerce_prod</text>
+  <text x="281" y="240" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="340" y="240" fill="#8B949E" font-size="11" class="ui">12 min ago</text>
+  <!-- Star (favorite) -->
+  <text x="600" y="240" fill="#2DD4BF" font-size="14" text-anchor="end" class="ui">★</text>
+  <!-- Buttons -->
+  <rect x="281" y="260" width="60" height="22" rx="4" fill="#2DD4BF" />
+  <text x="311" y="275" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="349" y="260" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="371" y="275" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- Card 2: analytics-pg (PostgreSQL, Connected) -->
+  <rect x="645" y="138" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="645" y="138" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="645" y="176" width="360" height="10" fill="#111827"/>
+  <circle cx="669" cy="162" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="669" y="167" fill="#3FB950" font-size="10" font-weight="700" text-anchor="middle" class="mono">Pg</text>
+  <text x="692" y="158" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">analytics-pg</text>
+  <text x="692" y="173" fill="#8B949E" font-size="10" class="ui">PostgreSQL 16</text>
+  <rect x="935" y="150" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95040" stroke-width="1"/>
+  <circle cx="945" cy="159" r="3" fill="#3FB950"/>
+  <text x="973" y="163" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Online</text>
+  <text x="661" y="204" fill="#4A5568" font-size="10" class="ui">Host</text>
+  <text x="720" y="204" fill="#E6EDF3" font-size="11" class="mono">analytics.internal:5432</text>
+  <text x="661" y="222" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="720" y="222" fill="#E6EDF3" font-size="11" class="mono">warehouse</text>
+  <text x="661" y="240" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="720" y="240" fill="#8B949E" font-size="11" class="ui">1 hour ago</text>
+  <text x="980" y="240" fill="#2DD4BF" font-size="14" text-anchor="end" class="ui">★</text>
+  <rect x="661" y="260" width="60" height="22" rx="4" fill="#2DD4BF"/>
+  <text x="691" y="275" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="729" y="260" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="751" y="275" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- Card 3: user-service (PostgreSQL, Offline) -->
+  <rect x="1025" y="138" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1025" y="138" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="1025" y="176" width="360" height="10" fill="#111827"/>
+  <circle cx="1049" cy="162" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1049" y="167" fill="#3FB950" font-size="10" font-weight="700" text-anchor="middle" class="mono">Pg</text>
+  <text x="1072" y="158" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">user-service</text>
+  <text x="1072" y="173" fill="#8B949E" font-size="10" class="ui">PostgreSQL 15</text>
+  <rect x="1315" y="150" width="58" height="18" rx="9" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <circle cx="1325" cy="159" r="3" fill="#4A5568"/>
+  <text x="1353" y="163" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">Offline</text>
+  <text x="1041" y="204" fill="#4A5568" font-size="10" class="ui">Host</text>
+  <text x="1100" y="204" fill="#8B949E" font-size="11" class="mono">users.staging:5432</text>
+  <text x="1041" y="222" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="1100" y="222" fill="#8B949E" font-size="11" class="mono">user_svc</text>
+  <text x="1041" y="240" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="1100" y="240" fill="#8B949E" font-size="11" class="ui">3 hours ago</text>
+  <text x="1360" y="240" fill="#4A5568" font-size="14" text-anchor="end" class="ui">☆</text>
+  <rect x="1041" y="260" width="60" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1071" y="275" fill="#8B949E" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="1109" y="260" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1131" y="275" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- Card 4: logs-mongo (MongoDB, Connected) -->
+  <rect x="265" y="316" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="265" y="316" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="265" y="354" width="360" height="10" fill="#111827"/>
+  <circle cx="289" cy="340" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="289" y="345" fill="#F5A623" font-size="10" font-weight="700" text-anchor="middle" class="mono">Mg</text>
+  <text x="312" y="336" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">logs-mongo</text>
+  <text x="312" y="351" fill="#8B949E" font-size="10" class="ui">MongoDB 7.0</text>
+  <rect x="555" y="328" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95040" stroke-width="1"/>
+  <circle cx="565" cy="337" r="3" fill="#3FB950"/>
+  <text x="593" y="341" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Online</text>
+  <text x="281" y="382" fill="#4A5568" font-size="10" class="ui">Host</text>
+  <text x="340" y="382" fill="#E6EDF3" font-size="11" class="mono">mongo.cluster:27017</text>
+  <text x="281" y="400" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="340" y="400" fill="#E6EDF3" font-size="11" class="mono">app_logs</text>
+  <text x="281" y="418" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="340" y="418" fill="#8B949E" font-size="11" class="ui">30 min ago</text>
+  <text x="600" y="418" fill="#4A5568" font-size="14" text-anchor="end" class="ui">☆</text>
+  <rect x="281" y="438" width="60" height="22" rx="4" fill="#2DD4BF"/>
+  <text x="311" y="453" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="349" y="438" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="371" y="453" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- Card 5: local-sqlite (SQLite, Connected) -->
+  <rect x="645" y="316" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="645" y="316" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="645" y="354" width="360" height="10" fill="#111827"/>
+  <circle cx="669" cy="340" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="669" y="345" fill="#BC8CFF" font-size="10" font-weight="700" text-anchor="middle" class="mono">SL</text>
+  <text x="692" y="336" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">local-sqlite</text>
+  <text x="692" y="351" fill="#8B949E" font-size="10" class="ui">SQLite 3.42</text>
+  <rect x="935" y="328" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95040" stroke-width="1"/>
+  <circle cx="945" cy="337" r="3" fill="#3FB950"/>
+  <text x="973" y="341" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Online</text>
+  <text x="661" y="382" fill="#4A5568" font-size="10" class="ui">Path</text>
+  <text x="720" y="382" fill="#E6EDF3" font-size="11" class="mono">~/dev/app.db</text>
+  <text x="661" y="400" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="720" y="400" fill="#E6EDF3" font-size="11" class="mono">app_data</text>
+  <text x="661" y="418" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="720" y="418" fill="#8B949E" font-size="11" class="ui">5 min ago</text>
+  <text x="980" y="418" fill="#4A5568" font-size="14" text-anchor="end" class="ui">☆</text>
+  <rect x="661" y="438" width="60" height="22" rx="4" fill="#2DD4BF"/>
+  <text x="691" y="453" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="729" y="438" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="751" y="453" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- Card 6: staging-mysql (MySQL, Offline) -->
+  <rect x="1025" y="316" width="360" height="160" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1025" y="316" width="360" height="48" rx="10" fill="#111827"/>
+  <rect x="1025" y="354" width="360" height="10" fill="#111827"/>
+  <circle cx="1049" cy="340" r="14" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1049" y="345" fill="#4F9EFF" font-size="10" font-weight="700" text-anchor="middle" class="mono">My</text>
+  <text x="1072" y="336" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">staging-mysql</text>
+  <text x="1072" y="351" fill="#8B949E" font-size="10" class="ui">MySQL 8.0</text>
+  <rect x="1315" y="328" width="58" height="18" rx="9" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <circle cx="1325" cy="337" r="3" fill="#4A5568"/>
+  <text x="1353" y="341" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">Offline</text>
+  <text x="1041" y="382" fill="#4A5568" font-size="10" class="ui">Host</text>
+  <text x="1100" y="382" fill="#8B949E" font-size="11" class="mono">staging.db:3306</text>
+  <text x="1041" y="400" fill="#4A5568" font-size="10" class="ui">Database</text>
+  <text x="1100" y="400" fill="#8B949E" font-size="11" class="mono">cms_staging</text>
+  <text x="1041" y="418" fill="#4A5568" font-size="10" class="ui">Last used</text>
+  <text x="1100" y="418" fill="#8B949E" font-size="11" class="ui">2 days ago</text>
+  <text x="1360" y="418" fill="#4A5568" font-size="14" text-anchor="end" class="ui">☆</text>
+  <rect x="1041" y="438" width="60" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1071" y="453" fill="#8B949E" font-size="10" font-weight="600" text-anchor="middle" class="ui">Connect</text>
+  <rect x="1109" y="438" width="44" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1131" y="453" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Edit</text>
+
+  <!-- ── STATUS BAR h=20 ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#3FB950"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">6 connections</text>
+  <text x="120" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="132" y="994" fill="#3FB950" font-size="10" class="ui">4 active</text>
+  <text x="1540" y="994" fill="#4A5568" font-size="10" text-anchor="end" class="ui">KawaiiDB v1.0</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 2 — NEW CONNECTION DIALOG                              -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 2 — NEW CONNECTION DIALOG</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- Dimmed navbar -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+
+  <!-- Dark overlay -->
+  <rect x="0" y="44" width="1600" height="956" fill="#070B14" opacity="0.7"/>
+
+  <!-- ── MODAL DIALOG ── -->
+  <rect x="300" y="60" width="1000" height="880" rx="12" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+
+  <!-- Title bar -->
+  <rect x="300" y="60" width="1000" height="44" rx="12" fill="#111827"/>
+  <rect x="300" y="92" width="1000" height="12" fill="#111827"/>
+  <text x="324" y="88" fill="#E6EDF3" font-size="15" font-weight="700" class="ui">New Connection</text>
+  <text x="1272" y="88" fill="#8B949E" font-size="14" cursor="pointer" class="ui">✕</text>
+  <rect x="300" y="103" width="1000" height="1" fill="#1E2D45"/>
+
+  <!-- Left panel: DB type selector -->
+  <rect x="300" y="104" width="220" height="836" fill="#111827"/>
+  <rect x="520" y="104" width="1" height="836" fill="#1E2D45"/>
+  <rect x="300" y="104" width="3" height="36" fill="#2DD4BF"/>
+  <text x="316" y="127" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">DATABASE TYPE</text>
+  <rect x="300" y="139" width="220" height="1" fill="#1E2D45"/>
+
+  <!-- MySQL (active) -->
+  <rect x="300" y="140" width="220" height="38" fill="#1C2333"/>
+  <rect x="300" y="140" width="3" height="38" fill="#2DD4BF"/>
+  <circle cx="320" cy="159" r="5" fill="#4F9EFF"/>
+  <text x="334" y="156" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">MySQL</text>
+  <text x="334" y="169" fill="#4A5568" font-size="9" class="ui">v5.7 / v8.x</text>
+  <!-- PostgreSQL -->
+  <rect x="300" y="178" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="197" r="5" fill="#3FB950"/>
+  <text x="334" y="194" fill="#8B949E" font-size="12" class="ui">PostgreSQL</text>
+  <text x="334" y="207" fill="#4A5568" font-size="9" class="ui">v12 - v16</text>
+  <!-- SQLite -->
+  <rect x="300" y="216" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="235" r="5" fill="#BC8CFF"/>
+  <text x="334" y="232" fill="#8B949E" font-size="12" class="ui">SQLite</text>
+  <text x="334" y="245" fill="#4A5568" font-size="9" class="ui">v3.x</text>
+  <!-- MongoDB -->
+  <rect x="300" y="254" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="273" r="5" fill="#F5A623"/>
+  <text x="334" y="270" fill="#8B949E" font-size="12" class="ui">MongoDB</text>
+  <text x="334" y="283" fill="#4A5568" font-size="9" class="ui">v5 - v7</text>
+  <!-- MariaDB -->
+  <rect x="300" y="292" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="311" r="5" fill="#79C0FF"/>
+  <text x="334" y="308" fill="#8B949E" font-size="12" class="ui">MariaDB</text>
+  <text x="334" y="321" fill="#4A5568" font-size="9" class="ui">v10.x / v11.x</text>
+  <!-- Redis -->
+  <rect x="300" y="330" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="349" r="5" fill="#F85149"/>
+  <text x="334" y="346" fill="#8B949E" font-size="12" class="ui">Redis</text>
+  <text x="334" y="359" fill="#4A5568" font-size="9" class="ui">v6 - v7</text>
+  <!-- Oracle -->
+  <rect x="300" y="368" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="387" r="5" fill="#F5A623"/>
+  <text x="334" y="384" fill="#8B949E" font-size="12" class="ui">Oracle</text>
+  <text x="334" y="397" fill="#4A5568" font-size="9" class="ui">v19c / v21c</text>
+  <!-- SQL Server -->
+  <rect x="300" y="406" width="220" height="38" fill="#111827"/>
+  <circle cx="320" cy="425" r="5" fill="#4F9EFF"/>
+  <text x="334" y="422" fill="#8B949E" font-size="12" class="ui">SQL Server</text>
+  <text x="334" y="435" fill="#4A5568" font-size="9" class="ui">2019 / 2022</text>
+
+  <!-- ── RIGHT PANEL: Form ── -->
+  <!-- Section: GENERAL -->
+  <rect x="521" y="104" width="3" height="36" fill="#2DD4BF"/>
+  <text x="540" y="127" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">GENERAL</text>
+  <rect x="521" y="139" width="779" height="1" fill="#1E2D45"/>
+
+  <!-- Connection Name -->
+  <text x="545" y="164" fill="#8B949E" font-size="11" class="ui">Connection Name</text>
+  <rect x="545" y="170" width="740" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="557" y="189" fill="#E6EDF3" font-size="12" class="mono">My MySQL Connection</text>
+
+  <!-- Host + Port -->
+  <text x="545" y="216" fill="#8B949E" font-size="11" class="ui">Host</text>
+  <rect x="545" y="222" width="560" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="557" y="241" fill="#E6EDF3" font-size="12" class="mono">localhost</text>
+  <text x="1120" y="216" fill="#8B949E" font-size="11" class="ui">Port</text>
+  <rect x="1120" y="222" width="165" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1132" y="241" fill="#E6EDF3" font-size="12" class="mono">3306</text>
+
+  <!-- Database -->
+  <text x="545" y="268" fill="#8B949E" font-size="11" class="ui">Database</text>
+  <rect x="545" y="274" width="740" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="557" y="293" fill="#E6EDF3" font-size="12" class="mono">ecommerce_dev</text>
+
+  <!-- Username + Password -->
+  <text x="545" y="320" fill="#8B949E" font-size="11" class="ui">Username</text>
+  <rect x="545" y="326" width="360" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="557" y="345" fill="#E6EDF3" font-size="12" class="mono">root</text>
+  <text x="920" y="320" fill="#8B949E" font-size="11" class="ui">Password</text>
+  <rect x="920" y="326" width="365" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="932" y="345" fill="#4A5568" font-size="12" class="mono">••••••••••••</text>
+  <text x="1268" y="345" fill="#8B949E" font-size="11" class="ui">👁</text>
+
+  <!-- Section: SSH TUNNEL -->
+  <rect x="521" y="370" width="779" height="1" fill="#1E2D45"/>
+  <rect x="521" y="371" width="3" height="36" fill="#4A5568"/>
+  <text x="540" y="394" fill="#8B949E" font-size="10" font-weight="700" letter-spacing="1" class="ui">SSH TUNNEL</text>
+  <!-- Toggle OFF -->
+  <rect x="1250" y="380" width="36" height="20" rx="10" fill="#243042"/>
+  <circle cx="1268" cy="390" r="7" fill="#4A5568"/>
+  <rect x="521" y="406" width="779" height="1" fill="#1E2D45"/>
+
+  <!-- Greyed fields -->
+  <text x="545" y="428" fill="#4A5568" font-size="11" class="ui">SSH Host</text>
+  <rect x="545" y="434" width="560" height="28" rx="5" fill="#1C2333" stroke="#1E2D45" stroke-width="1" opacity="0.4"/>
+  <text x="1120" y="428" fill="#4A5568" font-size="11" class="ui">SSH Port</text>
+  <rect x="1120" y="434" width="165" height="28" rx="5" fill="#1C2333" stroke="#1E2D45" stroke-width="1" opacity="0.4"/>
+  <text x="545" y="480" fill="#4A5568" font-size="11" class="ui">SSH Username</text>
+  <rect x="545" y="486" width="360" height="28" rx="5" fill="#1C2333" stroke="#1E2D45" stroke-width="1" opacity="0.4"/>
+  <text x="920" y="480" fill="#4A5568" font-size="11" class="ui">SSH Key</text>
+  <rect x="920" y="486" width="365" height="28" rx="5" fill="#1C2333" stroke="#1E2D45" stroke-width="1" opacity="0.4"/>
+
+  <!-- Section: ADVANCED -->
+  <rect x="521" y="530" width="779" height="1" fill="#1E2D45"/>
+  <rect x="521" y="531" width="3" height="36" fill="#2DD4BF"/>
+  <text x="540" y="554" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">ADVANCED OPTIONS</text>
+  <rect x="521" y="566" width="779" height="1" fill="#1E2D45"/>
+
+  <text x="545" y="588" fill="#8B949E" font-size="11" class="ui">Connection Timeout</text>
+  <rect x="545" y="594" width="120" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="557" y="613" fill="#E6EDF3" font-size="12" class="mono">30</text>
+  <text x="675" y="613" fill="#4A5568" font-size="11" class="ui">seconds</text>
+
+  <text x="740" y="588" fill="#8B949E" font-size="11" class="ui">Character Set</text>
+  <rect x="740" y="594" width="180" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="752" y="613" fill="#E6EDF3" font-size="12" class="mono">utf8mb4</text>
+  <text x="908" y="613" fill="#4A5568" font-size="10" class="ui">▾</text>
+
+  <text x="945" y="588" fill="#8B949E" font-size="11" class="ui">SSL Mode</text>
+  <rect x="945" y="594" width="340" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="957" y="613" fill="#E6EDF3" font-size="12" class="mono">Preferred</text>
+  <text x="1273" y="613" fill="#4A5568" font-size="10" class="ui">▾</text>
+
+  <!-- URL -->
+  <text x="545" y="644" fill="#8B949E" font-size="11" class="ui">Connection URL</text>
+  <rect x="545" y="650" width="740" height="28" rx="5" fill="#111827" stroke="#1E2D45" stroke-width="1"/>
+  <text x="557" y="669" fill="#4A5568" font-size="11" class="mono">mysql://root@localhost:3306/ecommerce_dev</text>
+
+  <!-- Section: DRIVER PROPERTIES -->
+  <rect x="521" y="694" width="779" height="1" fill="#1E2D45"/>
+  <rect x="521" y="695" width="3" height="36" fill="#79C0FF"/>
+  <text x="540" y="718" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">DRIVER PROPERTIES</text>
+  <rect x="521" y="730" width="779" height="1" fill="#1E2D45"/>
+
+  <!-- Table headers -->
+  <rect x="545" y="736" width="720" height="24" rx="0" fill="#111827"/>
+  <text x="557" y="752" fill="#8B949E" font-size="10" font-weight="600" class="ui">PROPERTY</text>
+  <text x="905" y="752" fill="#8B949E" font-size="10" font-weight="600" class="ui">VALUE</text>
+  <!-- Row 1 -->
+  <rect x="545" y="760" width="720" height="26" fill="#070B14"/>
+  <text x="557" y="778" fill="#E6EDF3" font-size="11" class="mono">allowPublicKeyRetrieval</text>
+  <text x="905" y="778" fill="#3FB950" font-size="11" class="mono">true</text>
+  <!-- Row 2 -->
+  <rect x="545" y="786" width="720" height="26" fill="#0D1117"/>
+  <text x="557" y="804" fill="#E6EDF3" font-size="11" class="mono">useSSL</text>
+  <text x="905" y="804" fill="#F85149" font-size="11" class="mono">false</text>
+  <!-- Row 3 -->
+  <rect x="545" y="812" width="720" height="26" fill="#070B14"/>
+  <text x="557" y="830" fill="#E6EDF3" font-size="11" class="mono">serverTimezone</text>
+  <text x="905" y="830" fill="#E6EDF3" font-size="11" class="mono">UTC</text>
+
+  <!-- ── BOTTOM BAR ── -->
+  <rect x="300" y="880" width="1000" height="1" fill="#1E2D45"/>
+  <!-- Test Connection -->
+  <rect x="324" y="896" width="120" height="28" rx="5" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="384" y="914" fill="#2DD4BF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Test Connection</text>
+  <!-- Success message -->
+  <text x="458" y="914" fill="#3FB950" font-size="11" class="ui">✓ Connection successful</text>
+  <!-- Cancel -->
+  <rect x="1064" y="896" width="64" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1096" y="914" fill="#8B949E" font-size="11" font-weight="600" text-anchor="middle" class="ui">Cancel</text>
+  <!-- Save -->
+  <rect x="1138" y="896" width="56" height="28" rx="5" fill="#2DD4BF"/>
+  <text x="1166" y="914" fill="#070B14" font-size="11" font-weight="600" text-anchor="middle" class="ui">Save</text>
+  <!-- Save & Connect -->
+  <rect x="1204" y="896" width="84" height="28" rx="5" fill="#4F9EFF"/>
+  <text x="1246" y="914" fill="white" font-size="11" font-weight="600" text-anchor="middle" class="ui">Save &amp; Go</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 3 — DATABASE NAVIGATOR + SQL EDITOR                    -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 3 — DATABASE NAVIGATOR + SQL EDITOR</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Connections</text>
+  <text x="310" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">Navigator</text>
+  <rect x="310" y="41" width="64" height="2" fill="#2DD4BF"/>
+  <text x="400" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#8B949E" font-size="12" font-weight="500" class="ui">AI Analyze</text>
+  <!-- Connection selector -->
+  <rect x="1180" y="10" width="200" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <circle cx="1194" cy="22" r="4" fill="#2DD4BF"/>
+  <text x="1204" y="26" fill="#E6EDF3" font-size="11" class="mono">prod-main-db (MySQL)</text>
+  <text x="1370" y="26" fill="#4A5568" font-size="10" class="ui">▾</text>
+  <!-- Execute button -->
+  <rect x="1400" y="10" width="80" height="24" rx="5" fill="#2DD4BF"/>
+  <text x="1440" y="26" fill="#070B14" font-size="11" font-weight="600" text-anchor="middle" class="ui">▶ Execute</text>
+  <!-- Format button -->
+  <rect x="1492" y="10" width="60" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1522" y="26" fill="#8B949E" font-size="11" font-weight="500" text-anchor="middle" class="ui">Format</text>
+
+  <!-- ── TAB BAR h=30 ── -->
+  <rect x="260" y="44" width="1340" height="30" fill="#0D1117"/>
+  <rect x="260" y="73" width="1340" height="1" fill="#1E2D45"/>
+  <!-- Active tab -->
+  <rect x="270" y="48" width="110" height="24" rx="4" fill="#1C2333"/>
+  <rect x="270" y="70" width="110" height="2" fill="#2DD4BF"/>
+  <text x="285" y="64" fill="#E6EDF3" font-size="11" class="mono">query-1.sql</text>
+  <text x="372" y="64" fill="#4A5568" font-size="10" class="ui">✕</text>
+  <!-- Tab 2 -->
+  <text x="400" y="64" fill="#8B949E" font-size="11" class="mono">sales-report.sql</text>
+  <text x="510" y="64" fill="#4A5568" font-size="10" class="ui">✕</text>
+  <!-- Tab 3 -->
+  <text x="536" y="64" fill="#8B949E" font-size="11" class="mono">migrations.sql</text>
+  <text x="640" y="64" fill="#4A5568" font-size="10" class="ui">✕</text>
+  <!-- New tab -->
+  <text x="666" y="64" fill="#4A5568" font-size="14" class="ui">+</text>
+
+  <!-- ── SCHEMA TREE SIDEBAR w=260 ── -->
+  <rect x="0" y="44" width="260" height="936" fill="#111827"/>
+  <rect x="260" y="44" width="1" height="936" fill="#1E2D45"/>
+  <rect x="0" y="44" width="3" height="36" fill="#2DD4BF"/>
+  <text x="14" y="67" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">DATABASE NAVIGATOR</text>
+  <rect x="0" y="79" width="260" height="1" fill="#1E2D45"/>
+
+  <!-- Connection node -->
+  <text x="12" y="100" fill="#2DD4BF" font-size="10" class="ui">▾</text>
+  <circle cx="30" cy="96" r="4" fill="#2DD4BF"/>
+  <text x="40" y="100" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">prod-main-db</text>
+  <text x="150" y="100" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+
+  <!-- Database -->
+  <text x="24" y="122" fill="#2DD4BF" font-size="10" class="ui">▾</text>
+  <text x="40" y="122" fill="#F5A623" font-size="10" class="ui">⛁</text>
+  <text x="54" y="122" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">ecommerce_prod</text>
+
+  <!-- Tables folder -->
+  <text x="40" y="144" fill="#2DD4BF" font-size="10" class="ui">▾</text>
+  <text x="56" y="144" fill="#8B949E" font-size="12" class="ui">Tables</text>
+  <rect x="224" y="134" width="24" height="14" rx="7" fill="#2DD4BF18"/>
+  <text x="236" y="145" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">12</text>
+
+  <!-- Table: users (active) -->
+  <rect x="0" y="150" width="260" height="24" fill="#1C2333"/>
+  <rect x="0" y="150" width="3" height="24" fill="#2DD4BF"/>
+  <text x="72" y="166" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="166" fill="#E6EDF3" font-size="11" font-weight="500" class="mono">users</text>
+  <!-- Table: products -->
+  <text x="72" y="190" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="190" fill="#C9D1D9" font-size="11" class="mono">products</text>
+  <!-- Table: orders -->
+  <text x="72" y="212" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="212" fill="#C9D1D9" font-size="11" class="mono">orders</text>
+  <!-- Table: order_items -->
+  <text x="72" y="234" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="234" fill="#C9D1D9" font-size="11" class="mono">order_items</text>
+  <!-- Table: categories -->
+  <text x="72" y="256" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="256" fill="#C9D1D9" font-size="11" class="mono">categories</text>
+  <!-- Table: payments -->
+  <text x="72" y="278" fill="#8B949E" font-size="10" class="ui">≡</text>
+  <text x="84" y="278" fill="#C9D1D9" font-size="11" class="mono">payments</text>
+  <!-- more... -->
+  <text x="84" y="298" fill="#4A5568" font-size="11" class="mono">...</text>
+
+  <!-- Views folder -->
+  <text x="40" y="324" fill="#8B949E" font-size="10" class="ui">▸</text>
+  <text x="56" y="324" fill="#8B949E" font-size="12" class="ui">Views</text>
+  <rect x="224" y="314" width="24" height="14" rx="7" fill="#1C2333"/>
+  <text x="236" y="325" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">3</text>
+
+  <!-- Stored Procedures -->
+  <text x="40" y="350" fill="#8B949E" font-size="10" class="ui">▸</text>
+  <text x="56" y="350" fill="#8B949E" font-size="12" class="ui">Stored Procedures</text>
+  <rect x="224" y="340" width="24" height="14" rx="7" fill="#1C2333"/>
+  <text x="236" y="351" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">5</text>
+
+  <!-- Functions -->
+  <text x="40" y="376" fill="#8B949E" font-size="10" class="ui">▸</text>
+  <text x="56" y="376" fill="#8B949E" font-size="12" class="ui">Functions</text>
+  <rect x="224" y="366" width="24" height="14" rx="7" fill="#1C2333"/>
+  <text x="236" y="377" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">2</text>
+
+  <!-- Other databases (collapsed) -->
+  <rect x="10" y="396" width="240" height="1" fill="#1E2D45"/>
+  <text x="24" y="418" fill="#4A5568" font-size="10" class="ui">▸</text>
+  <text x="40" y="418" fill="#4A5568" font-size="10" class="ui">⛁</text>
+  <text x="54" y="418" fill="#4A5568" font-size="12" class="ui">information_schema</text>
+  <text x="24" y="442" fill="#4A5568" font-size="10" class="ui">▸</text>
+  <text x="40" y="442" fill="#4A5568" font-size="10" class="ui">⛁</text>
+  <text x="54" y="442" fill="#4A5568" font-size="12" class="ui">performance_schema</text>
+
+  <!-- ── SQL EDITOR (top half) ── -->
+  <!-- Editor header -->
+  <rect x="261" y="74" width="1339" height="30" fill="#0D1117"/>
+  <rect x="261" y="74" width="3" height="30" fill="#2DD4BF"/>
+  <text x="274" y="93" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">SQL EDITOR</text>
+  <text x="1460" y="93" fill="#4A5568" font-size="10" text-anchor="end" class="mono">Ln 6, Col 24</text>
+  <rect x="261" y="103" width="1339" height="1" fill="#1E2D45"/>
+
+  <!-- Line numbers gutter -->
+  <rect x="261" y="104" width="40" height="440" fill="#0D1117"/>
+  <rect x="301" y="104" width="1" height="440" fill="#1E2D45"/>
+
+  <!-- Line numbers -->
+  <text x="294" y="124" fill="#4A5568" font-size="11" text-anchor="end" class="mono">1</text>
+  <text x="294" y="144" fill="#4A5568" font-size="11" text-anchor="end" class="mono">2</text>
+  <text x="294" y="164" fill="#4A5568" font-size="11" text-anchor="end" class="mono">3</text>
+  <text x="294" y="184" fill="#4A5568" font-size="11" text-anchor="end" class="mono">4</text>
+  <text x="294" y="204" fill="#4A5568" font-size="11" text-anchor="end" class="mono">5</text>
+  <text x="294" y="224" fill="#4A5568" font-size="11" text-anchor="end" class="mono">6</text>
+  <text x="294" y="244" fill="#4A5568" font-size="11" text-anchor="end" class="mono">7</text>
+  <text x="294" y="264" fill="#4A5568" font-size="11" text-anchor="end" class="mono">8</text>
+  <text x="294" y="284" fill="#4A5568" font-size="11" text-anchor="end" class="mono">9</text>
+  <text x="294" y="304" fill="#4A5568" font-size="11" text-anchor="end" class="mono">10</text>
+  <text x="294" y="324" fill="#4A5568" font-size="11" text-anchor="end" class="mono">11</text>
+  <text x="294" y="344" fill="#4A5568" font-size="11" text-anchor="end" class="mono">12</text>
+  <text x="294" y="364" fill="#4A5568" font-size="11" text-anchor="end" class="mono">13</text>
+  <text x="294" y="384" fill="#4A5568" font-size="11" text-anchor="end" class="mono">14</text>
+  <text x="294" y="404" fill="#4A5568" font-size="11" text-anchor="end" class="mono">15</text>
+
+  <!-- Current line highlight -->
+  <rect x="302" y="211" width="1298" height="20" fill="#1C233340"/>
+
+  <!-- SQL Code -->
+  <!-- Line 1: SELECT -->
+  <text x="312" y="124" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">SELECT</text>
+  <!-- Line 2 -->
+  <text x="336" y="144" fill="#2DD4BF" font-size="11" class="mono">u</text><text x="343" y="144" fill="#8B949E" font-size="11" class="mono">.</text><text x="349" y="144" fill="#E6EDF3" font-size="11" class="mono">id,</text>
+  <!-- Line 3 -->
+  <text x="336" y="164" fill="#2DD4BF" font-size="11" class="mono">u</text><text x="343" y="164" fill="#8B949E" font-size="11" class="mono">.</text><text x="349" y="164" fill="#E6EDF3" font-size="11" class="mono">username,</text>
+  <!-- Line 4 -->
+  <text x="336" y="184" fill="#2DD4BF" font-size="11" class="mono">u</text><text x="343" y="184" fill="#8B949E" font-size="11" class="mono">.</text><text x="349" y="184" fill="#E6EDF3" font-size="11" class="mono">email,</text>
+  <!-- Line 5 -->
+  <text x="336" y="204" fill="#BC8CFF" font-size="11" class="mono">COUNT</text><text x="376" y="204" fill="#8B949E" font-size="11" class="mono">(</text><text x="383" y="204" fill="#2DD4BF" font-size="11" class="mono">o</text><text x="390" y="204" fill="#8B949E" font-size="11" class="mono">.</text><text x="396" y="204" fill="#E6EDF3" font-size="11" class="mono">id)</text><text x="418" y="204" fill="#4F9EFF" font-size="11" font-weight="600" class="mono"> AS</text><text x="445" y="204" fill="#E6EDF3" font-size="11" class="mono"> total_orders,</text>
+  <!-- Line 6 -->
+  <text x="336" y="224" fill="#BC8CFF" font-size="11" class="mono">SUM</text><text x="362" y="224" fill="#8B949E" font-size="11" class="mono">(</text><text x="369" y="224" fill="#2DD4BF" font-size="11" class="mono">o</text><text x="376" y="224" fill="#8B949E" font-size="11" class="mono">.</text><text x="382" y="224" fill="#E6EDF3" font-size="11" class="mono">total_amount)</text><text x="480" y="224" fill="#4F9EFF" font-size="11" font-weight="600" class="mono"> AS</text><text x="507" y="224" fill="#E6EDF3" font-size="11" class="mono"> lifetime_value</text>
+  <!-- Line 7: FROM -->
+  <text x="312" y="244" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">FROM</text><text x="349" y="244" fill="#E6EDF3" font-size="11" class="mono"> users</text><text x="396" y="244" fill="#2DD4BF" font-size="11" class="mono"> u</text>
+  <!-- Line 8: LEFT JOIN -->
+  <text x="312" y="264" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">LEFT JOIN</text><text x="391" y="264" fill="#E6EDF3" font-size="11" class="mono"> orders</text><text x="444" y="264" fill="#2DD4BF" font-size="11" class="mono"> o</text><text x="457" y="264" fill="#4F9EFF" font-size="11" font-weight="600" class="mono"> ON</text><text x="479" y="264" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="486" y="264" fill="#8B949E" font-size="11" class="mono">.</text><text x="492" y="264" fill="#E6EDF3" font-size="11" class="mono">id</text><text x="508" y="264" fill="#8B949E" font-size="11" class="mono"> = </text><text x="527" y="264" fill="#2DD4BF" font-size="11" class="mono">o</text><text x="534" y="264" fill="#8B949E" font-size="11" class="mono">.</text><text x="540" y="264" fill="#E6EDF3" font-size="11" class="mono">user_id</text>
+  <!-- Line 9: WHERE -->
+  <text x="312" y="284" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">WHERE</text><text x="356" y="284" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="363" y="284" fill="#8B949E" font-size="11" class="mono">.</text><text x="369" y="284" fill="#E6EDF3" font-size="11" class="mono">created_at</text><text x="442" y="284" fill="#8B949E" font-size="11" class="mono"> >= </text><text x="469" y="284" fill="#3FB950" font-size="11" class="mono">'2024-01-01'</text>
+  <!-- Line 10: AND -->
+  <text x="336" y="304" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">AND</text><text x="363" y="304" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="370" y="304" fill="#8B949E" font-size="11" class="mono">.</text><text x="376" y="304" fill="#E6EDF3" font-size="11" class="mono">status</text><text x="418" y="304" fill="#8B949E" font-size="11" class="mono"> = </text><text x="438" y="304" fill="#3FB950" font-size="11" class="mono">'active'</text>
+  <!-- Line 11: GROUP BY -->
+  <text x="312" y="324" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">GROUP BY</text><text x="383" y="324" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="390" y="324" fill="#8B949E" font-size="11" class="mono">.</text><text x="396" y="324" fill="#E6EDF3" font-size="11" class="mono">id,</text><text x="419" y="324" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="426" y="324" fill="#8B949E" font-size="11" class="mono">.</text><text x="432" y="324" fill="#E6EDF3" font-size="11" class="mono">username,</text><text x="497" y="324" fill="#2DD4BF" font-size="11" class="mono"> u</text><text x="504" y="324" fill="#8B949E" font-size="11" class="mono">.</text><text x="510" y="324" fill="#E6EDF3" font-size="11" class="mono">email</text>
+  <!-- Line 12: HAVING -->
+  <text x="312" y="344" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">HAVING</text><text x="365" y="344" fill="#BC8CFF" font-size="11" class="mono"> COUNT</text><text x="409" y="344" fill="#8B949E" font-size="11" class="mono">(</text><text x="416" y="344" fill="#2DD4BF" font-size="11" class="mono">o</text><text x="423" y="344" fill="#8B949E" font-size="11" class="mono">.</text><text x="429" y="344" fill="#E6EDF3" font-size="11" class="mono">id)</text><text x="451" y="344" fill="#8B949E" font-size="11" class="mono"> > </text><text x="471" y="344" fill="#F5A623" font-size="11" class="mono">0</text>
+  <!-- Line 13: ORDER BY -->
+  <text x="312" y="364" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">ORDER BY</text><text x="383" y="364" fill="#E6EDF3" font-size="11" class="mono"> lifetime_value</text><text x="497" y="364" fill="#4F9EFF" font-size="11" font-weight="600" class="mono"> DESC</text>
+  <!-- Line 14: LIMIT -->
+  <text x="312" y="384" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">LIMIT</text><text x="356" y="384" fill="#F5A623" font-size="11" class="mono"> 50</text><text x="376" y="384" fill="#8B949E" font-size="11" class="mono">;</text>
+
+  <!-- ── RESULTS PANEL (bottom half) ── -->
+  <rect x="261" y="544" width="1339" height="1" fill="#1E2D45"/>
+  <rect x="261" y="545" width="3" height="30" fill="#3FB950"/>
+  <text x="274" y="564" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">RESULTS</text>
+  <text x="1420" y="564" fill="#3FB950" font-size="10" text-anchor="end" class="ui">47 rows in 0.023s</text>
+  <!-- Export button -->
+  <rect x="1440" y="550" width="50" height="20" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1465" y="564" fill="#8B949E" font-size="9" font-weight="500" text-anchor="middle" class="ui">Export</text>
+  <!-- Copy button -->
+  <rect x="1500" y="550" width="46" height="20" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1523" y="564" fill="#8B949E" font-size="9" font-weight="500" text-anchor="middle" class="ui">Copy</text>
+
+  <rect x="261" y="574" width="1339" height="1" fill="#1E2D45"/>
+
+  <!-- Column headers -->
+  <rect x="261" y="575" width="1339" height="24" fill="#111827"/>
+  <text x="280" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">ID</text>
+  <text x="340" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">USERNAME</text>
+  <text x="510" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">EMAIL</text>
+  <text x="760" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">TOTAL_ORDERS</text>
+  <text x="910" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">LIFETIME_VALUE</text>
+  <text x="1080" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">CREATED_AT</text>
+  <text x="1280" y="591" fill="#8B949E" font-size="10" font-weight="600" class="ui">STATUS</text>
+  <!-- Sort indicator -->
+  <text x="1030" y="591" fill="#2DD4BF" font-size="10" class="ui">▾</text>
+  <rect x="261" y="599" width="1339" height="1" fill="#1E2D45"/>
+
+  <!-- Data rows -->
+  <!-- Row 1 -->
+  <rect x="261" y="600" width="1339" height="28" fill="#070B14"/>
+  <text x="280" y="618" fill="#F5A623" font-size="11" class="mono">1</text>
+  <text x="340" y="618" fill="#E6EDF3" font-size="11" class="mono">john_smith</text>
+  <text x="510" y="618" fill="#79C0FF" font-size="11" class="mono">john@example.com</text>
+  <text x="800" y="618" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">156</text>
+  <text x="990" y="618" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$24,892.50</text>
+  <text x="1080" y="618" fill="#8B949E" font-size="11" class="mono">2024-01-15</text>
+  <rect x="1280" y="608" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="620" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 2 -->
+  <rect x="261" y="628" width="1339" height="28" fill="#0D1117"/>
+  <text x="280" y="646" fill="#F5A623" font-size="11" class="mono">2</text>
+  <text x="340" y="646" fill="#E6EDF3" font-size="11" class="mono">sarah_dev</text>
+  <text x="510" y="646" fill="#79C0FF" font-size="11" class="mono">sarah@company.io</text>
+  <text x="800" y="646" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">89</text>
+  <text x="990" y="646" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$18,456.00</text>
+  <text x="1080" y="646" fill="#8B949E" font-size="11" class="mono">2024-02-03</text>
+  <rect x="1280" y="636" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="648" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 3 -->
+  <rect x="261" y="656" width="1339" height="28" fill="#070B14"/>
+  <text x="280" y="674" fill="#F5A623" font-size="11" class="mono">3</text>
+  <text x="340" y="674" fill="#E6EDF3" font-size="11" class="mono">mike_ops</text>
+  <text x="510" y="674" fill="#79C0FF" font-size="11" class="mono">mike@devops.net</text>
+  <text x="800" y="674" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">67</text>
+  <text x="990" y="674" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$12,340.75</text>
+  <text x="1080" y="674" fill="#8B949E" font-size="11" class="mono">2024-01-22</text>
+  <rect x="1280" y="664" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="676" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 4 -->
+  <rect x="261" y="684" width="1339" height="28" fill="#0D1117"/>
+  <text x="280" y="702" fill="#F5A623" font-size="11" class="mono">4</text>
+  <text x="340" y="702" fill="#E6EDF3" font-size="11" class="mono">alex_eng</text>
+  <text x="510" y="702" fill="#79C0FF" font-size="11" class="mono">alex@startup.co</text>
+  <text x="800" y="702" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">45</text>
+  <text x="990" y="702" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$8,920.30</text>
+  <text x="1080" y="702" fill="#8B949E" font-size="11" class="mono">2024-03-10</text>
+  <rect x="1280" y="692" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="704" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 5 -->
+  <rect x="261" y="712" width="1339" height="28" fill="#070B14"/>
+  <text x="280" y="730" fill="#F5A623" font-size="11" class="mono">5</text>
+  <text x="340" y="730" fill="#E6EDF3" font-size="11" class="mono">lisa_qa</text>
+  <text x="510" y="730" fill="#79C0FF" font-size="11" class="mono">lisa@testing.org</text>
+  <text x="800" y="730" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">34</text>
+  <text x="990" y="730" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$6,780.00</text>
+  <text x="1080" y="730" fill="#8B949E" font-size="11" class="mono">2024-02-28</text>
+  <rect x="1280" y="720" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="732" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 6 -->
+  <rect x="261" y="740" width="1339" height="28" fill="#0D1117"/>
+  <text x="280" y="758" fill="#F5A623" font-size="11" class="mono">6</text>
+  <text x="340" y="758" fill="#E6EDF3" font-size="11" class="mono">dave_admin</text>
+  <text x="510" y="758" fill="#79C0FF" font-size="11" class="mono">dave@admin.io</text>
+  <text x="800" y="758" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">28</text>
+  <text x="990" y="758" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$5,100.50</text>
+  <text x="1080" y="758" fill="#8B949E" font-size="11" class="mono">2024-01-05</text>
+  <rect x="1280" y="748" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="760" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 7 -->
+  <rect x="261" y="768" width="1339" height="28" fill="#070B14"/>
+  <text x="280" y="786" fill="#F5A623" font-size="11" class="mono">7</text>
+  <text x="340" y="786" fill="#E6EDF3" font-size="11" class="mono">emma_pm</text>
+  <text x="510" y="786" fill="#79C0FF" font-size="11" class="mono">emma@project.com</text>
+  <text x="800" y="786" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">22</text>
+  <text x="990" y="786" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$4,250.00</text>
+  <text x="1080" y="786" fill="#8B949E" font-size="11" class="mono">2024-04-01</text>
+  <rect x="1280" y="776" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="788" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+  <!-- Row 8 -->
+  <rect x="261" y="796" width="1339" height="28" fill="#0D1117"/>
+  <text x="280" y="814" fill="#F5A623" font-size="11" class="mono">8</text>
+  <text x="340" y="814" fill="#E6EDF3" font-size="11" class="mono">tom_data</text>
+  <text x="510" y="814" fill="#79C0FF" font-size="11" class="mono">tom@analytics.co</text>
+  <text x="800" y="814" fill="#E6EDF3" font-size="11" text-anchor="end" class="mono">19</text>
+  <text x="990" y="814" fill="#3FB950" font-size="11" text-anchor="end" class="mono">$3,890.25</text>
+  <text x="1080" y="814" fill="#8B949E" font-size="11" class="mono">2024-03-15</text>
+  <rect x="1280" y="804" width="44" height="16" rx="8" fill="#3FB95018"/>
+  <text x="1302" y="816" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">active</text>
+
+  <!-- Pagination -->
+  <rect x="261" y="948" width="1339" height="32" fill="#0D1117"/>
+  <rect x="261" y="948" width="1339" height="1" fill="#1E2D45"/>
+  <text x="280" y="968" fill="#8B949E" font-size="10" class="ui">Showing 1-8 of 47 rows</text>
+  <!-- Page buttons -->
+  <rect x="750" y="954" width="24" height="20" rx="4" fill="#2DD4BF"/>
+  <text x="762" y="968" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">1</text>
+  <rect x="780" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="792" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">2</text>
+  <rect x="810" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="822" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">3</text>
+  <rect x="840" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="852" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">4</text>
+  <text x="876" y="968" fill="#4A5568" font-size="10" class="ui">...</text>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#3FB950"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">prod-main-db</text>
+  <text x="120" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="132" y="994" fill="#8B949E" font-size="10" class="ui">ecommerce_prod</text>
+  <text x="244" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="256" y="994" fill="#8B949E" font-size="10" class="ui">MySQL 8.0.35</text>
+  <text x="360" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="372" y="994" fill="#3FB950" font-size="10" class="ui">Query: 0.023s</text>
+  <text x="470" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="482" y="994" fill="#8B949E" font-size="10" class="ui">47 rows</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 4 — TABLE DATA VIEWER                                  -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 4 — TABLE DATA VIEWER</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" class="ui">Connections</text>
+  <text x="310" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">Navigator</text>
+  <rect x="310" y="41" width="64" height="2" fill="#2DD4BF"/>
+  <text x="400" y="27" fill="#8B949E" font-size="12" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#8B949E" font-size="12" class="ui">AI Analyze</text>
+
+  <!-- ── TABLE HEADER BAR h=52 ── -->
+  <rect x="0" y="44" width="1600" height="52" fill="#0D1117"/>
+  <rect x="0" y="95" width="1600" height="1" fill="#1E2D45"/>
+  <rect x="0" y="44" width="3" height="52" fill="#2DD4BF"/>
+  <text x="20" y="66" fill="#8B949E" font-size="12" class="ui">≡</text>
+  <text x="36" y="66" fill="#E6EDF3" font-size="15" font-weight="700" class="ui">users</text>
+  <!-- Breadcrumb -->
+  <text x="20" y="84" fill="#4A5568" font-size="10" class="ui">ecommerce_prod</text>
+  <text x="108" y="84" fill="#4A5568" font-size="10" class="ui">›</text>
+  <text x="118" y="84" fill="#4A5568" font-size="10" class="ui">Tables</text>
+  <text x="150" y="84" fill="#4A5568" font-size="10" class="ui">›</text>
+  <text x="160" y="84" fill="#8B949E" font-size="10" class="ui">users</text>
+  <!-- Row count badge -->
+  <rect x="210" y="56" width="80" height="18" rx="9" fill="#2DD4BF18" stroke="#2DD4BF30" stroke-width="1"/>
+  <text x="250" y="69" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">1,247 rows</text>
+  <!-- Action buttons -->
+  <rect x="1124" y="58" width="72" height="24" rx="5" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="1160" y="74" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">+ Add Row</text>
+  <rect x="1204" y="58" width="78" height="24" rx="5" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="1243" y="74" fill="#F85149" font-size="10" font-weight="600" text-anchor="middle" class="ui">Delete Row</text>
+  <rect x="1290" y="58" width="64" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1322" y="74" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Refresh</text>
+  <rect x="1362" y="58" width="80" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1402" y="74" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Export CSV</text>
+  <rect x="1450" y="58" width="46" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1473" y="74" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">DDL</text>
+
+  <!-- ── FILTER BAR h=36 ── -->
+  <rect x="0" y="96" width="1600" height="36" fill="#111827"/>
+  <rect x="0" y="131" width="1600" height="1" fill="#1E2D45"/>
+  <text x="16" y="118" fill="#8B949E" font-size="11" class="ui">Filter:</text>
+  <rect x="60" y="102" width="400" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="72" y="119" fill="#4A5568" font-size="10" class="mono">WHERE status = 'active' AND created_at > '2024-01-01'</text>
+  <rect x="470" y="102" width="46" height="24" rx="4" fill="#2DD4BF"/>
+  <text x="493" y="119" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Apply</text>
+  <rect x="524" y="102" width="44" height="24" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="546" y="119" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Clear</text>
+  <rect x="580" y="104" width="92" height="20" rx="9" fill="#F5A62314" stroke="#F5A62330" stroke-width="1"/>
+  <text x="626" y="118" fill="#F5A623" font-size="9" font-weight="600" text-anchor="middle" class="ui">2 filters active</text>
+
+  <!-- ── COLUMN HEADERS h=28 ── -->
+  <rect x="0" y="132" width="1600" height="28" fill="#111827"/>
+  <rect x="0" y="159" width="1600" height="1" fill="#1E2D45"/>
+  <!-- Checkbox col -->
+  <rect x="14" y="140" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <!-- id -->
+  <text x="44" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">ID</text>
+  <text x="55" y="149" fill="#F5A623" font-size="8" class="ui">🔑</text>
+  <text x="44" y="157" fill="#4A5568" font-size="8" class="ui">INT</text>
+  <!-- username -->
+  <text x="106" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">USERNAME</text>
+  <text x="175" y="149" fill="#2DD4BF" font-size="8" class="ui">▾</text>
+  <text x="106" y="157" fill="#4A5568" font-size="8" class="ui">VARCHAR(50)</text>
+  <!-- email -->
+  <text x="266" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">EMAIL</text>
+  <text x="266" y="157" fill="#4A5568" font-size="8" class="ui">VARCHAR(255)</text>
+  <!-- first_name -->
+  <text x="470" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">FIRST_NAME</text>
+  <text x="470" y="157" fill="#4A5568" font-size="8" class="ui">VARCHAR(100)</text>
+  <!-- last_name -->
+  <text x="614" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">LAST_NAME</text>
+  <text x="614" y="157" fill="#4A5568" font-size="8" class="ui">VARCHAR(100)</text>
+  <!-- status -->
+  <text x="756" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">STATUS</text>
+  <text x="756" y="157" fill="#4A5568" font-size="8" class="ui">ENUM</text>
+  <!-- role -->
+  <text x="860" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">ROLE</text>
+  <text x="860" y="157" fill="#4A5568" font-size="8" class="ui">VARCHAR(20)</text>
+  <!-- created_at -->
+  <text x="966" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">CREATED_AT</text>
+  <text x="966" y="157" fill="#4A5568" font-size="8" class="ui">DATETIME</text>
+  <!-- updated_at -->
+  <text x="1140" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">UPDATED_AT</text>
+  <text x="1140" y="157" fill="#4A5568" font-size="8" class="ui">DATETIME</text>
+  <!-- last_login -->
+  <text x="1320" y="149" fill="#8B949E" font-size="10" font-weight="600" class="ui">LAST_LOGIN</text>
+  <text x="1320" y="157" fill="#4A5568" font-size="8" class="ui">DATETIME</text>
+
+  <!-- ── DATA GRID ── -->
+  <!-- Row 1 -->
+  <rect x="0" y="160" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="170" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="179" fill="#F5A623" font-size="11" class="mono">1</text>
+  <text x="106" y="179" fill="#E6EDF3" font-size="11" class="mono">john_smith</text>
+  <text x="266" y="179" fill="#79C0FF" font-size="11" class="mono">john@example.com</text>
+  <text x="470" y="179" fill="#E6EDF3" font-size="11" class="mono">John</text>
+  <text x="614" y="179" fill="#E6EDF3" font-size="11" class="mono">Smith</text>
+  <circle cx="762" cy="175" r="3" fill="#3FB950"/>
+  <text x="772" y="179" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="179" fill="#E6EDF3" font-size="11" class="mono">admin</text>
+  <text x="966" y="179" fill="#8B949E" font-size="11" class="mono">2024-01-15 09:23</text>
+  <text x="1140" y="179" fill="#8B949E" font-size="11" class="mono">2024-03-12 14:30</text>
+  <text x="1320" y="179" fill="#8B949E" font-size="11" class="mono">2024-03-12 14:30</text>
+
+  <!-- Row 2 -->
+  <rect x="0" y="190" width="1600" height="30" fill="#0D1117"/>
+  <rect x="14" y="200" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="209" fill="#F5A623" font-size="11" class="mono">2</text>
+  <text x="106" y="209" fill="#E6EDF3" font-size="11" class="mono">sarah_dev</text>
+  <text x="266" y="209" fill="#79C0FF" font-size="11" class="mono">sarah@company.io</text>
+  <text x="470" y="209" fill="#E6EDF3" font-size="11" class="mono">Sarah</text>
+  <text x="614" y="209" fill="#E6EDF3" font-size="11" class="mono">Johnson</text>
+  <circle cx="762" cy="205" r="3" fill="#3FB950"/>
+  <text x="772" y="209" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="209" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="209" fill="#8B949E" font-size="11" class="mono">2024-02-03 11:45</text>
+  <text x="1140" y="209" fill="#8B949E" font-size="11" class="mono">2024-03-11 16:20</text>
+  <text x="1320" y="209" fill="#8B949E" font-size="11" class="mono">2024-03-11 16:20</text>
+
+  <!-- Row 3 (selected) -->
+  <rect x="0" y="220" width="1600" height="30" fill="#2DD4BF10"/>
+  <rect x="0" y="220" width="3" height="30" fill="#2DD4BF"/>
+  <rect x="14" y="230" width="12" height="12" rx="2" fill="#2DD4BF" stroke="#2DD4BF" stroke-width="1"/>
+  <text x="17" y="240" fill="#070B14" font-size="9" font-weight="700" class="ui">✓</text>
+  <text x="44" y="239" fill="#F5A623" font-size="11" class="mono">3</text>
+  <text x="106" y="239" fill="#E6EDF3" font-size="11" class="mono">mike_ops</text>
+  <text x="266" y="239" fill="#79C0FF" font-size="11" class="mono">mike@devops.net</text>
+  <text x="470" y="239" fill="#E6EDF3" font-size="11" class="mono">Mike</text>
+  <text x="614" y="239" fill="#E6EDF3" font-size="11" class="mono">Williams</text>
+  <circle cx="762" cy="235" r="3" fill="#3FB950"/>
+  <text x="772" y="239" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="239" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="239" fill="#8B949E" font-size="11" class="mono">2024-01-22 08:10</text>
+  <text x="1140" y="239" fill="#8B949E" font-size="11" class="mono">2024-03-10 09:15</text>
+  <text x="1320" y="239" fill="#8B949E" font-size="11" class="mono">2024-03-10 09:15</text>
+
+  <!-- Row 4 (inactive user, editing cell) -->
+  <rect x="0" y="250" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="260" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="269" fill="#F5A623" font-size="11" class="mono">4</text>
+  <!-- Editing cell: username in edit mode -->
+  <rect x="102" y="253" width="152" height="24" rx="3" fill="#1C2333" stroke="#4F9EFF" stroke-width="2"/>
+  <text x="108" y="269" fill="#E6EDF3" font-size="11" class="mono">alex_eng</text>
+  <rect x="163" y="257" width="1" height="16" fill="#4F9EFF"/>
+  <text x="266" y="269" fill="#79C0FF" font-size="11" class="mono">alex@startup.co</text>
+  <text x="470" y="269" fill="#E6EDF3" font-size="11" class="mono">Alex</text>
+  <text x="614" y="269" fill="#E6EDF3" font-size="11" class="mono">Brown</text>
+  <circle cx="762" cy="265" r="3" fill="#F85149"/>
+  <text x="772" y="269" fill="#E6EDF3" font-size="11" class="mono">inactive</text>
+  <text x="860" y="269" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="269" fill="#8B949E" font-size="11" class="mono">2024-03-10 15:30</text>
+  <text x="1140" y="269" fill="#8B949E" font-size="11" class="mono">2024-03-10 15:30</text>
+  <text x="1320" y="269" fill="#4A5568" font-size="11" font-style="italic" class="mono">NULL</text>
+
+  <!-- Row 5 -->
+  <rect x="0" y="280" width="1600" height="30" fill="#0D1117"/>
+  <rect x="14" y="290" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="299" fill="#F5A623" font-size="11" class="mono">5</text>
+  <text x="106" y="299" fill="#E6EDF3" font-size="11" class="mono">lisa_qa</text>
+  <text x="266" y="299" fill="#79C0FF" font-size="11" class="mono">lisa@testing.org</text>
+  <text x="470" y="299" fill="#E6EDF3" font-size="11" class="mono">Lisa</text>
+  <text x="614" y="299" fill="#E6EDF3" font-size="11" class="mono">Davis</text>
+  <circle cx="762" cy="295" r="3" fill="#3FB950"/>
+  <text x="772" y="299" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="299" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="299" fill="#8B949E" font-size="11" class="mono">2024-02-28 12:00</text>
+  <text x="1140" y="299" fill="#8B949E" font-size="11" class="mono">2024-03-09 18:45</text>
+  <text x="1320" y="299" fill="#8B949E" font-size="11" class="mono">2024-03-09 18:45</text>
+
+  <!-- Row 6 -->
+  <rect x="0" y="310" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="320" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="329" fill="#F5A623" font-size="11" class="mono">6</text>
+  <text x="106" y="329" fill="#E6EDF3" font-size="11" class="mono">dave_admin</text>
+  <text x="266" y="329" fill="#79C0FF" font-size="11" class="mono">dave@admin.io</text>
+  <text x="470" y="329" fill="#E6EDF3" font-size="11" class="mono">Dave</text>
+  <text x="614" y="329" fill="#E6EDF3" font-size="11" class="mono">Chen</text>
+  <circle cx="762" cy="325" r="3" fill="#3FB950"/>
+  <text x="772" y="329" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="329" fill="#E6EDF3" font-size="11" class="mono">admin</text>
+  <text x="966" y="329" fill="#8B949E" font-size="11" class="mono">2024-01-05 14:20</text>
+  <text x="1140" y="329" fill="#8B949E" font-size="11" class="mono">2024-03-12 10:00</text>
+  <text x="1320" y="329" fill="#8B949E" font-size="11" class="mono">2024-03-12 10:00</text>
+
+  <!-- Row 7 -->
+  <rect x="0" y="340" width="1600" height="30" fill="#0D1117"/>
+  <rect x="14" y="350" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="359" fill="#F5A623" font-size="11" class="mono">7</text>
+  <text x="106" y="359" fill="#E6EDF3" font-size="11" class="mono">emma_pm</text>
+  <text x="266" y="359" fill="#79C0FF" font-size="11" class="mono">emma@project.com</text>
+  <text x="470" y="359" fill="#E6EDF3" font-size="11" class="mono">Emma</text>
+  <text x="614" y="359" fill="#E6EDF3" font-size="11" class="mono">Wilson</text>
+  <circle cx="762" cy="355" r="3" fill="#3FB950"/>
+  <text x="772" y="359" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="359" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="359" fill="#8B949E" font-size="11" class="mono">2024-04-01 09:00</text>
+  <text x="1140" y="359" fill="#8B949E" font-size="11" class="mono">2024-03-08 11:30</text>
+  <text x="1320" y="359" fill="#8B949E" font-size="11" class="mono">2024-03-08 11:30</text>
+
+  <!-- Row 8 -->
+  <rect x="0" y="370" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="380" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="389" fill="#F5A623" font-size="11" class="mono">8</text>
+  <text x="106" y="389" fill="#E6EDF3" font-size="11" class="mono">tom_data</text>
+  <text x="266" y="389" fill="#79C0FF" font-size="11" class="mono">tom@analytics.co</text>
+  <text x="470" y="389" fill="#E6EDF3" font-size="11" class="mono">Tom</text>
+  <text x="614" y="389" fill="#E6EDF3" font-size="11" class="mono">Anderson</text>
+  <circle cx="762" cy="385" r="3" fill="#3FB950"/>
+  <text x="772" y="389" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="389" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="389" fill="#8B949E" font-size="11" class="mono">2024-03-15 16:45</text>
+  <text x="1140" y="389" fill="#8B949E" font-size="11" class="mono">2024-03-07 14:20</text>
+  <text x="1320" y="389" fill="#8B949E" font-size="11" class="mono">2024-03-07 14:20</text>
+
+  <!-- Rows 9-15 (abbreviated for space) -->
+  <rect x="0" y="400" width="1600" height="30" fill="#0D1117"/>
+  <rect x="14" y="410" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="419" fill="#F5A623" font-size="11" class="mono">9</text>
+  <text x="106" y="419" fill="#E6EDF3" font-size="11" class="mono">nina_fe</text>
+  <text x="266" y="419" fill="#79C0FF" font-size="11" class="mono">nina@frontend.dev</text>
+  <text x="470" y="419" fill="#E6EDF3" font-size="11" class="mono">Nina</text>
+  <text x="614" y="419" fill="#E6EDF3" font-size="11" class="mono">Garcia</text>
+  <circle cx="762" cy="415" r="3" fill="#3FB950"/>
+  <text x="772" y="419" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="419" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="419" fill="#8B949E" font-size="11" class="mono">2024-02-14 10:30</text>
+  <text x="1140" y="419" fill="#8B949E" font-size="11" class="mono">2024-03-06 09:10</text>
+  <text x="1320" y="419" fill="#8B949E" font-size="11" class="mono">2024-03-06 09:10</text>
+
+  <rect x="0" y="430" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="440" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="449" fill="#F5A623" font-size="11" class="mono">10</text>
+  <text x="106" y="449" fill="#E6EDF3" font-size="11" class="mono">jake_be</text>
+  <text x="266" y="449" fill="#79C0FF" font-size="11" class="mono">jake@backend.io</text>
+  <text x="470" y="449" fill="#E6EDF3" font-size="11" class="mono">Jake</text>
+  <text x="614" y="449" fill="#E6EDF3" font-size="11" class="mono">Martinez</text>
+  <circle cx="762" cy="445" r="3" fill="#F5A623"/>
+  <text x="772" y="449" fill="#E6EDF3" font-size="11" class="mono">pending</text>
+  <text x="860" y="449" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="449" fill="#8B949E" font-size="11" class="mono">2024-03-01 14:00</text>
+  <text x="1140" y="449" fill="#8B949E" font-size="11" class="mono">2024-03-01 14:00</text>
+  <text x="1320" y="449" fill="#4A5568" font-size="11" font-style="italic" class="mono">NULL</text>
+
+  <!-- More rows... -->
+  <rect x="0" y="460" width="1600" height="30" fill="#0D1117"/>
+  <rect x="14" y="470" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="479" fill="#F5A623" font-size="11" class="mono">11</text>
+  <text x="106" y="479" fill="#E6EDF3" font-size="11" class="mono">sophia_ux</text>
+  <text x="266" y="479" fill="#79C0FF" font-size="11" class="mono">sophia@design.co</text>
+  <text x="470" y="479" fill="#E6EDF3" font-size="11" class="mono">Sophia</text>
+  <text x="614" y="479" fill="#E6EDF3" font-size="11" class="mono">Lee</text>
+  <circle cx="762" cy="475" r="3" fill="#3FB950"/>
+  <text x="772" y="479" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="479" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="479" fill="#8B949E" font-size="11" class="mono">2024-01-30 08:00</text>
+  <text x="1140" y="479" fill="#8B949E" font-size="11" class="mono">2024-03-05 12:45</text>
+  <text x="1320" y="479" fill="#8B949E" font-size="11" class="mono">2024-03-05 12:45</text>
+
+  <rect x="0" y="490" width="1600" height="30" fill="#070B14"/>
+  <rect x="14" y="500" width="12" height="12" rx="2" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="44" y="509" fill="#F5A623" font-size="11" class="mono">12</text>
+  <text x="106" y="509" fill="#E6EDF3" font-size="11" class="mono">ryan_devops</text>
+  <text x="266" y="509" fill="#79C0FF" font-size="11" class="mono">ryan@infra.net</text>
+  <text x="470" y="509" fill="#E6EDF3" font-size="11" class="mono">Ryan</text>
+  <text x="614" y="509" fill="#E6EDF3" font-size="11" class="mono">Taylor</text>
+  <circle cx="762" cy="505" r="3" fill="#3FB950"/>
+  <text x="772" y="509" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="509" fill="#E6EDF3" font-size="11" class="mono">admin</text>
+  <text x="966" y="509" fill="#8B949E" font-size="11" class="mono">2024-01-10 11:15</text>
+  <text x="1140" y="509" fill="#8B949E" font-size="11" class="mono">2024-03-04 16:30</text>
+  <text x="1320" y="509" fill="#8B949E" font-size="11" class="mono">2024-03-04 16:30</text>
+
+  <!-- Continue alternating rows to fill space -->
+  <rect x="0" y="520" width="1600" height="30" fill="#0D1117"/>
+  <text x="44" y="539" fill="#F5A623" font-size="11" class="mono">13</text>
+  <text x="106" y="539" fill="#E6EDF3" font-size="11" class="mono">olivia_ml</text>
+  <text x="266" y="539" fill="#79C0FF" font-size="11" class="mono">olivia@ml.ai</text>
+  <text x="470" y="539" fill="#E6EDF3" font-size="11" class="mono">Olivia</text>
+  <text x="614" y="539" fill="#E6EDF3" font-size="11" class="mono">Thomas</text>
+  <circle cx="762" cy="535" r="3" fill="#3FB950"/>
+  <text x="772" y="539" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="539" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="539" fill="#8B949E" font-size="11" class="mono">2024-02-20 13:00</text>
+  <text x="1140" y="539" fill="#8B949E" font-size="11" class="mono">2024-03-03 10:20</text>
+  <text x="1320" y="539" fill="#8B949E" font-size="11" class="mono">2024-03-03 10:20</text>
+
+  <!-- Rows 14-25 (fading out pattern to show there's more data) -->
+  <rect x="0" y="550" width="1600" height="30" fill="#070B14"/>
+  <text x="44" y="569" fill="#F5A623" font-size="11" class="mono">14</text>
+  <text x="106" y="569" fill="#E6EDF3" font-size="11" class="mono">ethan_sec</text>
+  <text x="266" y="569" fill="#79C0FF" font-size="11" class="mono">ethan@security.io</text>
+  <text x="470" y="569" fill="#E6EDF3" font-size="11" class="mono">Ethan</text>
+  <text x="614" y="569" fill="#E6EDF3" font-size="11" class="mono">Jackson</text>
+  <circle cx="762" cy="565" r="3" fill="#F85149"/>
+  <text x="772" y="569" fill="#E6EDF3" font-size="11" class="mono">inactive</text>
+  <text x="860" y="569" fill="#E6EDF3" font-size="11" class="mono">admin</text>
+  <text x="966" y="569" fill="#8B949E" font-size="11" class="mono">2024-01-08 09:30</text>
+  <text x="1140" y="569" fill="#8B949E" font-size="11" class="mono">2024-02-15 08:00</text>
+  <text x="1320" y="569" fill="#4A5568" font-size="11" font-style="italic" class="mono">NULL</text>
+
+  <rect x="0" y="580" width="1600" height="30" fill="#0D1117"/>
+  <text x="44" y="599" fill="#F5A623" font-size="11" class="mono">15</text>
+  <text x="106" y="599" fill="#E6EDF3" font-size="11" class="mono">mia_cloud</text>
+  <text x="266" y="599" fill="#79C0FF" font-size="11" class="mono">mia@cloud.dev</text>
+  <text x="470" y="599" fill="#E6EDF3" font-size="11" class="mono">Mia</text>
+  <text x="614" y="599" fill="#E6EDF3" font-size="11" class="mono">White</text>
+  <circle cx="762" cy="595" r="3" fill="#3FB950"/>
+  <text x="772" y="599" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="599" fill="#E6EDF3" font-size="11" class="mono">editor</text>
+  <text x="966" y="599" fill="#8B949E" font-size="11" class="mono">2024-03-05 10:00</text>
+  <text x="1140" y="599" fill="#8B949E" font-size="11" class="mono">2024-03-12 15:00</text>
+  <text x="1320" y="599" fill="#8B949E" font-size="11" class="mono">2024-03-12 15:00</text>
+
+  <!-- Remaining empty rows to fill grid area -->
+  <rect x="0" y="610" width="1600" height="30" fill="#070B14"/>
+  <text x="44" y="629" fill="#F5A623" font-size="11" class="mono">16</text>
+  <text x="106" y="629" fill="#E6EDF3" font-size="11" class="mono">noah_api</text>
+  <text x="266" y="629" fill="#79C0FF" font-size="11" class="mono">noah@api.dev</text>
+  <text x="470" y="629" fill="#E6EDF3" font-size="11" class="mono">Noah</text>
+  <text x="614" y="629" fill="#E6EDF3" font-size="11" class="mono">Harris</text>
+  <circle cx="762" cy="625" r="3" fill="#3FB950"/>
+  <text x="772" y="629" fill="#E6EDF3" font-size="11" class="mono">active</text>
+  <text x="860" y="629" fill="#E6EDF3" font-size="11" class="mono">viewer</text>
+  <text x="966" y="629" fill="#8B949E" font-size="11" class="mono">2024-02-10 07:30</text>
+  <text x="1140" y="629" fill="#8B949E" font-size="11" class="mono">2024-03-02 11:45</text>
+  <text x="1320" y="629" fill="#8B949E" font-size="11" class="mono">2024-03-02 11:45</text>
+
+  <rect x="0" y="640" width="1600" height="308" fill="#0D1117" opacity="0.3"/>
+
+  <!-- ── PAGINATION BAR ── -->
+  <rect x="0" y="948" width="1600" height="32" fill="#0D1117"/>
+  <rect x="0" y="948" width="1600" height="1" fill="#1E2D45"/>
+  <text x="16" y="968" fill="#8B949E" font-size="11" class="ui">Showing 1-25 of 1,247 rows</text>
+  <!-- Page buttons -->
+  <text x="680" y="968" fill="#8B949E" font-size="10" class="ui">«</text>
+  <text x="700" y="968" fill="#8B949E" font-size="10" class="ui">‹</text>
+  <rect x="720" y="954" width="24" height="20" rx="4" fill="#2DD4BF"/>
+  <text x="732" y="968" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">1</text>
+  <rect x="750" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="762" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">2</text>
+  <rect x="780" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="792" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">3</text>
+  <text x="816" y="968" fill="#4A5568" font-size="10" class="ui">...</text>
+  <rect x="836" y="954" width="24" height="20" rx="4" fill="#1C2333"/>
+  <text x="848" y="968" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">50</text>
+  <text x="872" y="968" fill="#8B949E" font-size="10" class="ui">›</text>
+  <text x="890" y="968" fill="#8B949E" font-size="10" class="ui">»</text>
+  <!-- Rows per page -->
+  <text x="1380" y="968" fill="#4A5568" font-size="10" class="ui">Rows per page:</text>
+  <rect x="1470" y="954" width="50" height="20" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1490" y="968" fill="#E6EDF3" font-size="10" class="mono">25</text>
+  <text x="1510" y="968" fill="#4A5568" font-size="10" class="ui">▾</text>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#3FB950"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">prod-main-db</text>
+  <text x="120" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="132" y="994" fill="#8B949E" font-size="10" class="ui">users (1,247 rows)</text>
+  <text x="270" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="282" y="994" fill="#2DD4BF" font-size="10" class="ui">1 row selected</text>
+  <text x="380" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="392" y="994" fill="#8B949E" font-size="10" class="ui">Cell: username</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 5 — ER DIAGRAM VIEW                                    -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 5 — ER DIAGRAM VIEW</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.5" fill="#1E2D4540"/>
+    </pattern>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" class="ui">Connections</text>
+  <text x="310" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">Navigator</text>
+  <rect x="310" y="41" width="64" height="2" fill="#2DD4BF"/>
+  <text x="400" y="27" fill="#8B949E" font-size="12" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#8B949E" font-size="12" class="ui">AI Analyze</text>
+
+  <!-- ── TOOLBAR h=36 ── -->
+  <rect x="0" y="44" width="1600" height="36" fill="#0D1117"/>
+  <rect x="0" y="79" width="1600" height="1" fill="#1E2D45"/>
+  <rect x="0" y="44" width="3" height="36" fill="#2DD4BF"/>
+  <text x="14" y="67" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">ER DIAGRAM</text>
+  <text x="120" y="67" fill="#4A5568" font-size="10" class="ui">ecommerce_prod</text>
+  <!-- Zoom controls -->
+  <rect x="1200" y="52" width="28" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1214" y="67" fill="#8B949E" font-size="12" text-anchor="middle" class="ui">−</text>
+  <text x="1244" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">100%</text>
+  <rect x="1268" y="52" width="28" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1282" y="67" fill="#8B949E" font-size="12" text-anchor="middle" class="ui">+</text>
+  <rect x="1310" y="52" width="80" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1350" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Auto Layout</text>
+  <rect x="1400" y="52" width="80" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1440" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Export PNG</text>
+  <rect x="1490" y="52" width="90" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1535" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Fit to Screen</text>
+
+  <!-- ── CANVAS with dot grid ── -->
+  <rect x="0" y="80" width="1600" height="900" fill="url(#grid)"/>
+
+  <!-- ═══ TABLE: users (selected) ═══ -->
+  <rect x="80" y="140" width="240" height="230" rx="8" fill="#0D1117" stroke="#2DD4BF" stroke-width="2"/>
+  <rect x="80" y="140" width="240" height="32" rx="8" fill="#111827"/>
+  <rect x="80" y="164" width="240" height="8" fill="#111827"/>
+  <rect x="80" y="140" width="3" height="32" rx="2" fill="#2DD4BF"/>
+  <text x="96" y="161" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">users</text>
+  <text x="290" y="161" fill="#4A5568" font-size="9" text-anchor="end" class="ui">1,247</text>
+  <!-- Columns -->
+  <text x="96" y="188" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="112" y="188" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="280" y="188" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="112" y="206" fill="#E6EDF3" font-size="10" class="mono">username</text>
+  <text x="280" y="206" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(50)</text>
+  <text x="112" y="224" fill="#E6EDF3" font-size="10" class="mono">email</text>
+  <text x="280" y="224" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(255)</text>
+  <text x="112" y="242" fill="#E6EDF3" font-size="10" class="mono">first_name</text>
+  <text x="280" y="242" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(100)</text>
+  <text x="112" y="260" fill="#E6EDF3" font-size="10" class="mono">last_name</text>
+  <text x="280" y="260" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(100)</text>
+  <text x="112" y="278" fill="#E6EDF3" font-size="10" class="mono">status</text>
+  <text x="280" y="278" fill="#4A5568" font-size="9" text-anchor="end" class="mono">ENUM</text>
+  <text x="112" y="296" fill="#E6EDF3" font-size="10" class="mono">role</text>
+  <text x="280" y="296" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(20)</text>
+  <text x="112" y="314" fill="#E6EDF3" font-size="10" class="mono">created_at</text>
+  <text x="280" y="314" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DATETIME</text>
+  <rect x="80" y="322" width="240" height="48" rx="8" fill="#0D1117"/>
+
+  <!-- ═══ TABLE: orders ═══ -->
+  <rect x="480" y="110" width="240" height="212" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="480" y="110" width="240" height="32" rx="8" fill="#111827"/>
+  <rect x="480" y="134" width="240" height="8" fill="#111827"/>
+  <rect x="480" y="110" width="3" height="32" rx="2" fill="#4F9EFF"/>
+  <text x="496" y="131" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">orders</text>
+  <text x="690" y="131" fill="#4A5568" font-size="9" text-anchor="end" class="ui">8,432</text>
+  <text x="496" y="158" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="512" y="158" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="680" y="158" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="496" y="176" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="512" y="176" fill="#E6EDF3" font-size="10" class="mono">user_id</text>
+  <text x="680" y="176" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="512" y="194" fill="#E6EDF3" font-size="10" class="mono">total_amount</text>
+  <text x="680" y="194" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DECIMAL</text>
+  <text x="512" y="212" fill="#E6EDF3" font-size="10" class="mono">status</text>
+  <text x="680" y="212" fill="#4A5568" font-size="9" text-anchor="end" class="mono">ENUM</text>
+  <text x="496" y="230" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="512" y="230" fill="#E6EDF3" font-size="10" class="mono">shipping_addr_id</text>
+  <text x="680" y="230" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="512" y="248" fill="#E6EDF3" font-size="10" class="mono">created_at</text>
+  <text x="680" y="248" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DATETIME</text>
+  <text x="512" y="266" fill="#E6EDF3" font-size="10" class="mono">updated_at</text>
+  <text x="680" y="266" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DATETIME</text>
+
+  <!-- ═══ TABLE: order_items ═══ -->
+  <rect x="880" y="100" width="260" height="194" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="880" y="100" width="260" height="32" rx="8" fill="#111827"/>
+  <rect x="880" y="124" width="260" height="8" fill="#111827"/>
+  <rect x="880" y="100" width="3" height="32" rx="2" fill="#3FB950"/>
+  <text x="896" y="121" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">order_items</text>
+  <text x="1110" y="121" fill="#4A5568" font-size="9" text-anchor="end" class="ui">24,891</text>
+  <text x="896" y="148" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="912" y="148" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="1100" y="148" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="896" y="166" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="912" y="166" fill="#E6EDF3" font-size="10" class="mono">order_id</text>
+  <text x="1100" y="166" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="896" y="184" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="912" y="184" fill="#E6EDF3" font-size="10" class="mono">product_id</text>
+  <text x="1100" y="184" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="912" y="202" fill="#E6EDF3" font-size="10" class="mono">quantity</text>
+  <text x="1100" y="202" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="912" y="220" fill="#E6EDF3" font-size="10" class="mono">unit_price</text>
+  <text x="1100" y="220" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DECIMAL</text>
+  <text x="912" y="238" fill="#E6EDF3" font-size="10" class="mono">subtotal</text>
+  <text x="1100" y="238" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DECIMAL</text>
+
+  <!-- ═══ TABLE: products ═══ -->
+  <rect x="880" y="420" width="240" height="212" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="880" y="420" width="240" height="32" rx="8" fill="#111827"/>
+  <rect x="880" y="444" width="240" height="8" fill="#111827"/>
+  <rect x="880" y="420" width="3" height="32" rx="2" fill="#F5A623"/>
+  <text x="896" y="441" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">products</text>
+  <text x="1090" y="441" fill="#4A5568" font-size="9" text-anchor="end" class="ui">3,456</text>
+  <text x="896" y="468" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="912" y="468" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="1080" y="468" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="912" y="486" fill="#E6EDF3" font-size="10" class="mono">name</text>
+  <text x="1080" y="486" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(200)</text>
+  <text x="912" y="504" fill="#E6EDF3" font-size="10" class="mono">sku</text>
+  <text x="1080" y="504" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(50)</text>
+  <text x="912" y="522" fill="#E6EDF3" font-size="10" class="mono">price</text>
+  <text x="1080" y="522" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DECIMAL</text>
+  <text x="896" y="540" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="912" y="540" fill="#E6EDF3" font-size="10" class="mono">category_id</text>
+  <text x="1080" y="540" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="912" y="558" fill="#E6EDF3" font-size="10" class="mono">stock_quantity</text>
+  <text x="1080" y="558" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="912" y="576" fill="#E6EDF3" font-size="10" class="mono">created_at</text>
+  <text x="1080" y="576" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DATETIME</text>
+
+  <!-- ═══ TABLE: categories ═══ -->
+  <rect x="1280" y="420" width="220" height="176" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1280" y="420" width="220" height="32" rx="8" fill="#111827"/>
+  <rect x="1280" y="444" width="220" height="8" fill="#111827"/>
+  <rect x="1280" y="420" width="3" height="32" rx="2" fill="#BC8CFF"/>
+  <text x="1296" y="441" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">categories</text>
+  <text x="1470" y="441" fill="#4A5568" font-size="9" text-anchor="end" class="ui">48</text>
+  <text x="1296" y="468" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="1312" y="468" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="1460" y="468" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="1312" y="486" fill="#E6EDF3" font-size="10" class="mono">name</text>
+  <text x="1460" y="486" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(100)</text>
+  <text x="1296" y="504" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="1312" y="504" fill="#E6EDF3" font-size="10" class="mono">parent_id</text>
+  <text x="1460" y="504" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="1312" y="522" fill="#E6EDF3" font-size="10" class="mono">slug</text>
+  <text x="1460" y="522" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(100)</text>
+  <text x="1312" y="540" fill="#E6EDF3" font-size="10" class="mono">sort_order</text>
+  <text x="1460" y="540" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+
+  <!-- ═══ TABLE: payments ═══ -->
+  <rect x="480" y="460" width="240" height="212" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="480" y="460" width="240" height="32" rx="8" fill="#111827"/>
+  <rect x="480" y="484" width="240" height="8" fill="#111827"/>
+  <rect x="480" y="460" width="3" height="32" rx="2" fill="#F85149"/>
+  <text x="496" y="481" fill="#E6EDF3" font-size="12" font-weight="700" class="ui">payments</text>
+  <text x="690" y="481" fill="#4A5568" font-size="9" text-anchor="end" class="ui">7,891</text>
+  <text x="496" y="508" fill="#F5A623" font-size="9" class="ui">🔑</text>
+  <text x="512" y="508" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <text x="680" y="508" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT</text>
+  <text x="496" y="526" fill="#4F9EFF" font-size="9" class="ui">→</text>
+  <text x="512" y="526" fill="#E6EDF3" font-size="10" class="mono">order_id</text>
+  <text x="680" y="526" fill="#4A5568" font-size="9" text-anchor="end" class="mono">INT FK</text>
+  <text x="512" y="544" fill="#E6EDF3" font-size="10" class="mono">amount</text>
+  <text x="680" y="544" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DECIMAL</text>
+  <text x="512" y="562" fill="#E6EDF3" font-size="10" class="mono">method</text>
+  <text x="680" y="562" fill="#4A5568" font-size="9" text-anchor="end" class="mono">ENUM</text>
+  <text x="512" y="580" fill="#E6EDF3" font-size="10" class="mono">status</text>
+  <text x="680" y="580" fill="#4A5568" font-size="9" text-anchor="end" class="mono">ENUM</text>
+  <text x="512" y="598" fill="#E6EDF3" font-size="10" class="mono">transaction_id</text>
+  <text x="680" y="598" fill="#4A5568" font-size="9" text-anchor="end" class="mono">VARCHAR(100)</text>
+  <text x="512" y="616" fill="#E6EDF3" font-size="10" class="mono">paid_at</text>
+  <text x="680" y="616" fill="#4A5568" font-size="9" text-anchor="end" class="mono">DATETIME</text>
+
+  <!-- ═══ RELATIONSHIP LINES ═══ -->
+  <!-- users.id -> orders.user_id (1:N) -->
+  <path d="M320,188 C400,188 430,176 480,176" stroke="#4F9EFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="320" cy="188" r="4" fill="none" stroke="#4F9EFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="480" cy="176" r="4" fill="#4F9EFF" opacity="0.6"/>
+  <text x="400" y="172" fill="#4A5568" font-size="9" text-anchor="middle" class="ui">1 : N</text>
+
+  <!-- orders.id -> order_items.order_id (1:N) -->
+  <path d="M720,158 C800,158 840,166 880,166" stroke="#4F9EFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="720" cy="158" r="4" fill="none" stroke="#4F9EFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="880" cy="166" r="4" fill="#4F9EFF" opacity="0.6"/>
+  <text x="800" y="152" fill="#4A5568" font-size="9" text-anchor="middle" class="ui">1 : N</text>
+
+  <!-- products.id -> order_items.product_id (1:N) -->
+  <path d="M1000,420 C1000,360 1000,240 1000,184" stroke="#4F9EFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="1000" cy="420" r="4" fill="none" stroke="#4F9EFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="1000" cy="184" r="4" fill="#4F9EFF" opacity="0.6"/>
+  <text x="1014" y="300" fill="#4A5568" font-size="9" class="ui">1 : N</text>
+
+  <!-- orders.id -> payments.order_id (1:N) -->
+  <path d="M600,322 C600,390 600,440 600,460" stroke="#4F9EFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="600" cy="322" r="4" fill="none" stroke="#4F9EFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="600" cy="460" r="4" fill="#4F9EFF" opacity="0.6"/>
+  <text x="614" y="390" fill="#4A5568" font-size="9" class="ui">1 : N</text>
+
+  <!-- categories.id -> products.category_id (1:N) -->
+  <path d="M1280,468 C1200,468 1170,540 1120,540" stroke="#4F9EFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="1280" cy="468" r="4" fill="none" stroke="#4F9EFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="1120" cy="540" r="4" fill="#4F9EFF" opacity="0.6"/>
+  <text x="1200" y="494" fill="#4A5568" font-size="9" text-anchor="middle" class="ui">1 : N</text>
+
+  <!-- categories.id -> categories.parent_id (self-ref) -->
+  <path d="M1500,468 C1540,468 1540,504 1500,504" stroke="#BC8CFF" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="1500" cy="468" r="4" fill="none" stroke="#BC8CFF" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="1500" cy="504" r="4" fill="#BC8CFF" opacity="0.6"/>
+  <text x="1550" y="490" fill="#4A5568" font-size="9" class="ui">self</text>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#3FB950"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">ER Diagram</text>
+  <text x="100" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="112" y="994" fill="#8B949E" font-size="10" class="ui">ecommerce_prod</text>
+  <text x="222" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="234" y="994" fill="#8B949E" font-size="10" class="ui">6 tables</text>
+  <text x="296" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="308" y="994" fill="#8B949E" font-size="10" class="ui">6 relationships</text>
+  <text x="420" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="432" y="994" fill="#8B949E" font-size="10" class="ui">Zoom: 100%</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 6 — DASHBOARD / MONITORING                             -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 6 — DASHBOARD / MONITORING</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" class="ui">Connections</text>
+  <text x="310" y="27" fill="#8B949E" font-size="12" class="ui">Navigator</text>
+  <text x="400" y="27" fill="#8B949E" font-size="12" class="ui">Query</text>
+  <text x="470" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">Dashboard</text>
+  <rect x="470" y="41" width="66" height="2" fill="#2DD4BF"/>
+  <text x="560" y="27" fill="#8B949E" font-size="12" class="ui">AI Analyze</text>
+  <!-- Right side -->
+  <text x="1340" y="27" fill="#4A5568" font-size="10" class="ui">Last updated: 12s ago</text>
+  <rect x="1470" y="10" width="60" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1500" y="26" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Refresh</text>
+
+  <!-- ── METRICS STRIP h=80 ── -->
+  <rect x="0" y="44" width="1600" height="80" fill="#0D1117"/>
+  <rect x="0" y="123" width="1600" height="1" fill="#1E2D45"/>
+
+  <!-- Card 1: Active Connections -->
+  <rect x="20" y="52" width="370" height="64" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="20" y="52" width="3" height="64" rx="2" fill="#3FB950"/>
+  <text x="36" y="70" fill="#8B949E" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">ACTIVE CONNECTIONS</text>
+  <text x="36" y="100" fill="#E6EDF3" font-size="28" font-weight="700" class="mono">24</text>
+  <text x="80" y="100" fill="#4A5568" font-size="12" class="ui">/ 100 max</text>
+  <text x="310" y="100" fill="#3FB950" font-size="10" text-anchor="end" class="ui">↑ 3 from yesterday</text>
+
+  <!-- Card 2: Queries/Sec -->
+  <rect x="410" y="52" width="370" height="64" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="410" y="52" width="3" height="64" rx="2" fill="#2DD4BF"/>
+  <text x="426" y="70" fill="#8B949E" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">QUERIES / SEC</text>
+  <text x="426" y="100" fill="#2DD4BF" font-size="28" font-weight="700" class="mono">1,247</text>
+  <text x="530" y="100" fill="#4A5568" font-size="12" class="ui">avg last 5m</text>
+  <text x="710" y="100" fill="#3FB950" font-size="10" text-anchor="end" class="ui">↑ 12%</text>
+
+  <!-- Card 3: Avg Query Time -->
+  <rect x="800" y="52" width="370" height="64" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="800" y="52" width="3" height="64" rx="2" fill="#4F9EFF"/>
+  <text x="816" y="70" fill="#8B949E" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">AVG QUERY TIME</text>
+  <text x="816" y="100" fill="#E6EDF3" font-size="28" font-weight="700" class="mono">23ms</text>
+  <text x="920" y="100" fill="#4A5568" font-size="12" class="ui">p95: 156ms</text>
+  <text x="1100" y="100" fill="#3FB950" font-size="10" text-anchor="end" class="ui">↓ 5ms</text>
+
+  <!-- Card 4: Disk Usage -->
+  <rect x="1190" y="52" width="390" height="64" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1190" y="52" width="3" height="64" rx="2" fill="#F5A623"/>
+  <text x="1206" y="70" fill="#8B949E" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">DISK USAGE</text>
+  <text x="1206" y="100" fill="#E6EDF3" font-size="28" font-weight="700" class="mono">67.2</text>
+  <text x="1280" y="100" fill="#4A5568" font-size="14" class="ui">GB</text>
+  <!-- Progress bar -->
+  <rect x="1330" y="88" width="200" height="4" rx="2" fill="#1C2333"/>
+  <rect x="1330" y="88" width="134" height="4" rx="2" fill="#F5A623"/>
+  <text x="1330" y="104" fill="#4A5568" font-size="10" class="ui">of 100 GB</text>
+  <text x="1510" y="100" fill="#F5A623" font-size="10" text-anchor="end" class="ui">↑ 2.1 GB this week</text>
+
+  <!-- ── CHARTS ROW 1 ── -->
+  <!-- Chart 1: Query Performance Over Time -->
+  <rect x="20" y="134" width="770" height="360" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="20" y="134" width="3" height="36" rx="2" fill="#2DD4BF"/>
+  <text x="36" y="157" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">QUERY PERFORMANCE</text>
+  <!-- Time pills -->
+  <rect x="630" y="140" width="28" height="18" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="644" y="153" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">1H</text>
+  <rect x="664" y="140" width="28" height="18" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="678" y="153" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">6H</text>
+  <rect x="698" y="140" width="32" height="18" rx="9" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="714" y="153" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">24H</text>
+  <rect x="736" y="140" width="28" height="18" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="750" y="153" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">7D</text>
+
+  <!-- Y axis labels -->
+  <text x="44" y="195" fill="#4A5568" font-size="9" class="mono">200ms</text>
+  <text x="44" y="245" fill="#4A5568" font-size="9" class="mono">150ms</text>
+  <text x="44" y="295" fill="#4A5568" font-size="9" class="mono">100ms</text>
+  <text x="44" y="345" fill="#4A5568" font-size="9" class="mono">50ms</text>
+  <text x="44" y="395" fill="#4A5568" font-size="9" class="mono">0ms</text>
+  <!-- Grid lines -->
+  <line x1="80" y1="191" x2="770" y2="191" stroke="#1E2D45" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="80" y1="241" x2="770" y2="241" stroke="#1E2D45" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="80" y1="291" x2="770" y2="291" stroke="#1E2D45" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="80" y1="341" x2="770" y2="341" stroke="#1E2D45" stroke-width="0.5" stroke-dasharray="4,4"/>
+  <line x1="80" y1="391" x2="770" y2="391" stroke="#1E2D45" stroke-width="0.5" stroke-dasharray="4,4"/>
+
+  <!-- X axis labels -->
+  <text x="100" y="418" fill="#4A5568" font-size="9" class="mono">00:00</text>
+  <text x="210" y="418" fill="#4A5568" font-size="9" class="mono">04:00</text>
+  <text x="325" y="418" fill="#4A5568" font-size="9" class="mono">08:00</text>
+  <text x="440" y="418" fill="#4A5568" font-size="9" class="mono">12:00</text>
+  <text x="555" y="418" fill="#4A5568" font-size="9" class="mono">16:00</text>
+  <text x="665" y="418" fill="#4A5568" font-size="9" class="mono">20:00</text>
+  <text x="750" y="418" fill="#8B949E" font-size="9" class="mono">Now</text>
+
+  <!-- Line: avg query time (teal) -->
+  <path d="M100,350 C150,345 180,340 210,355 C240,370 270,360 325,335 C380,310 410,290 440,305 C470,320 510,340 555,330 C600,320 640,325 665,340 C690,355 720,345 750,340" stroke="#2DD4BF" stroke-width="2" fill="none"/>
+  <!-- Area fill -->
+  <path d="M100,350 C150,345 180,340 210,355 C240,370 270,360 325,335 C380,310 410,290 440,305 C470,320 510,340 555,330 C600,320 640,325 665,340 C690,355 720,345 750,340 L750,391 L100,391 Z" fill="#2DD4BF" opacity="0.05"/>
+
+  <!-- Line: p95 (amber, dashed) -->
+  <path d="M100,290 C150,285 180,275 210,295 C240,315 270,300 325,265 C380,230 410,210 440,235 C470,260 510,280 555,265 C600,250 640,260 665,275 C690,290 720,280 750,275" stroke="#F5A623" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+
+  <!-- Legend -->
+  <line x1="100" y1="450" x2="120" y2="450" stroke="#2DD4BF" stroke-width="2"/>
+  <text x="128" y="454" fill="#8B949E" font-size="10" class="ui">Avg Query Time</text>
+  <line x1="260" y1="450" x2="280" y2="450" stroke="#F5A623" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="288" y="454" fill="#8B949E" font-size="10" class="ui">p95 Latency</text>
+
+  <!-- Chart 2: Queries by Type (donut) -->
+  <rect x="810" y="134" width="770" height="360" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="810" y="134" width="3" height="36" rx="2" fill="#4F9EFF"/>
+  <text x="826" y="157" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">QUERIES BY TYPE</text>
+
+  <!-- Donut chart (using stroke-dasharray) -->
+  <!-- Total circumference for r=70: 2*pi*70 = 439.82 -->
+  <!-- SELECT 52% = 228.7, INSERT 22% = 96.8, UPDATE 15% = 66.0, DELETE 5% = 22.0, Other 6% = 26.4 -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#1C2333" stroke-width="20"/>
+  <!-- SELECT (blue) 52% -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#4F9EFF" stroke-width="20"
+    stroke-dasharray="228.7 211.1" stroke-dashoffset="110" transform="rotate(-90 1020 320)"/>
+  <!-- INSERT (green) 22% -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#3FB950" stroke-width="20"
+    stroke-dasharray="96.8 343" stroke-dashoffset="-118.7" transform="rotate(-90 1020 320)"/>
+  <!-- UPDATE (amber) 15% -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#F5A623" stroke-width="20"
+    stroke-dasharray="66 373.8" stroke-dashoffset="-215.5" transform="rotate(-90 1020 320)"/>
+  <!-- DELETE (red) 5% -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#F85149" stroke-width="20"
+    stroke-dasharray="22 417.8" stroke-dashoffset="-281.5" transform="rotate(-90 1020 320)"/>
+  <!-- Other (purple) 6% -->
+  <circle cx="1020" cy="320" r="70" fill="none" stroke="#BC8CFF" stroke-width="20"
+    stroke-dasharray="26.4 413.4" stroke-dashoffset="-303.5" transform="rotate(-90 1020 320)"/>
+
+  <!-- Center text -->
+  <text x="1020" y="316" fill="#E6EDF3" font-size="22" font-weight="700" text-anchor="middle" class="mono">8.4K</text>
+  <text x="1020" y="334" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">total queries</text>
+
+  <!-- Legend -->
+  <circle cx="1180" cy="240" r="5" fill="#4F9EFF"/>
+  <text x="1192" y="244" fill="#E6EDF3" font-size="11" class="ui">SELECT</text>
+  <text x="1310" y="244" fill="#8B949E" font-size="11" text-anchor="end" class="ui">52%</text>
+  <text x="1380" y="244" fill="#4A5568" font-size="10" text-anchor="end" class="mono">4,368</text>
+
+  <circle cx="1180" cy="268" r="5" fill="#3FB950"/>
+  <text x="1192" y="272" fill="#E6EDF3" font-size="11" class="ui">INSERT</text>
+  <text x="1310" y="272" fill="#8B949E" font-size="11" text-anchor="end" class="ui">22%</text>
+  <text x="1380" y="272" fill="#4A5568" font-size="10" text-anchor="end" class="mono">1,848</text>
+
+  <circle cx="1180" cy="296" r="5" fill="#F5A623"/>
+  <text x="1192" y="300" fill="#E6EDF3" font-size="11" class="ui">UPDATE</text>
+  <text x="1310" y="300" fill="#8B949E" font-size="11" text-anchor="end" class="ui">15%</text>
+  <text x="1380" y="300" fill="#4A5568" font-size="10" text-anchor="end" class="mono">1,260</text>
+
+  <circle cx="1180" cy="324" r="5" fill="#F85149"/>
+  <text x="1192" y="328" fill="#E6EDF3" font-size="11" class="ui">DELETE</text>
+  <text x="1310" y="328" fill="#8B949E" font-size="11" text-anchor="end" class="ui">5%</text>
+  <text x="1380" y="328" fill="#4A5568" font-size="10" text-anchor="end" class="mono">420</text>
+
+  <circle cx="1180" cy="352" r="5" fill="#BC8CFF"/>
+  <text x="1192" y="356" fill="#E6EDF3" font-size="11" class="ui">Other</text>
+  <text x="1310" y="356" fill="#8B949E" font-size="11" text-anchor="end" class="ui">6%</text>
+  <text x="1380" y="356" fill="#4A5568" font-size="10" text-anchor="end" class="mono">504</text>
+
+  <!-- ── CHARTS ROW 2 ── -->
+  <!-- Panel 1: Active Queries -->
+  <rect x="20" y="510" width="1060" height="460" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="20" y="510" width="3" height="36" rx="2" fill="#3FB950"/>
+  <text x="36" y="533" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">ACTIVE QUERIES</text>
+  <rect x="160" y="520" width="64" height="16" rx="8" fill="#3FB95018"/>
+  <text x="192" y="532" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">8 running</text>
+  <rect x="20" y="545" width="1060" height="1" fill="#1E2D45"/>
+
+  <!-- Column headers -->
+  <rect x="20" y="546" width="1060" height="24" fill="#111827"/>
+  <text x="36" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">PID</text>
+  <text x="96" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">USER</text>
+  <text x="196" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">DATABASE</text>
+  <text x="320" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">QUERY</text>
+  <text x="740" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">DURATION</text>
+  <text x="830" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">STATE</text>
+  <text x="960" y="562" fill="#8B949E" font-size="9" font-weight="600" class="ui">ACTIONS</text>
+  <rect x="20" y="570" width="1060" height="1" fill="#1E2D45"/>
+
+  <!-- Query rows -->
+  <!-- Row 1 -->
+  <rect x="20" y="571" width="1060" height="34" fill="#070B14"/>
+  <text x="36" y="593" fill="#8B949E" font-size="10" class="mono">4521</text>
+  <text x="96" y="593" fill="#E6EDF3" font-size="10" class="mono">root</text>
+  <text x="196" y="593" fill="#E6EDF3" font-size="10" class="mono">ecommerce</text>
+  <text x="320" y="593" fill="#C9D1D9" font-size="10" class="mono">SELECT u.*, COUNT(o.id) FROM users u LEFT JOIN...</text>
+  <text x="740" y="593" fill="#3FB950" font-size="10" class="mono">0.023s</text>
+  <rect x="830" y="582" width="56" height="16" rx="8" fill="#3FB95018"/>
+  <text x="858" y="594" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">executing</text>
+  <rect x="940" y="581" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="594" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Row 2 -->
+  <rect x="20" y="605" width="1060" height="34" fill="#0D1117"/>
+  <text x="36" y="627" fill="#8B949E" font-size="10" class="mono">4523</text>
+  <text x="96" y="627" fill="#E6EDF3" font-size="10" class="mono">app_user</text>
+  <text x="196" y="627" fill="#E6EDF3" font-size="10" class="mono">analytics</text>
+  <text x="320" y="627" fill="#C9D1D9" font-size="10" class="mono">INSERT INTO daily_stats SELECT DATE(created_at)...</text>
+  <text x="740" y="627" fill="#3FB950" font-size="10" class="mono">1.2s</text>
+  <rect x="830" y="616" width="56" height="16" rx="8" fill="#3FB95018"/>
+  <text x="858" y="628" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">executing</text>
+  <rect x="940" y="615" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="628" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Row 3 (slow - amber) -->
+  <rect x="20" y="639" width="1060" height="34" fill="#070B14"/>
+  <text x="36" y="661" fill="#8B949E" font-size="10" class="mono">4525</text>
+  <text x="96" y="661" fill="#E6EDF3" font-size="10" class="mono">report_svc</text>
+  <text x="196" y="661" fill="#E6EDF3" font-size="10" class="mono">warehouse</text>
+  <text x="320" y="661" fill="#C9D1D9" font-size="10" class="mono">SELECT p.name, SUM(oi.quantity) FROM products p...</text>
+  <text x="740" y="661" fill="#F5A623" font-size="10" font-weight="600" class="mono">4.7s</text>
+  <rect x="830" y="650" width="50" height="16" rx="8" fill="#4F9EFF18"/>
+  <text x="855" y="662" fill="#4F9EFF" font-size="9" text-anchor="middle" class="ui">sending</text>
+  <rect x="940" y="649" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="662" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Row 4 (very slow - red) -->
+  <rect x="20" y="673" width="1060" height="34" fill="#0D1117"/>
+  <text x="36" y="695" fill="#8B949E" font-size="10" class="mono">4527</text>
+  <text x="96" y="695" fill="#E6EDF3" font-size="10" class="mono">cron_job</text>
+  <text x="196" y="695" fill="#E6EDF3" font-size="10" class="mono">ecommerce</text>
+  <text x="320" y="695" fill="#C9D1D9" font-size="10" class="mono">DELETE FROM sessions WHERE expired_at &lt; NOW()...</text>
+  <text x="740" y="695" fill="#F85149" font-size="10" font-weight="600" class="mono">12.3s</text>
+  <rect x="830" y="684" width="56" height="16" rx="8" fill="#3FB95018"/>
+  <text x="858" y="696" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">executing</text>
+  <rect x="940" y="683" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="696" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Row 5 -->
+  <rect x="20" y="707" width="1060" height="34" fill="#070B14"/>
+  <text x="36" y="729" fill="#8B949E" font-size="10" class="mono">4529</text>
+  <text x="96" y="729" fill="#E6EDF3" font-size="10" class="mono">app_user</text>
+  <text x="196" y="729" fill="#E6EDF3" font-size="10" class="mono">ecommerce</text>
+  <text x="320" y="729" fill="#C9D1D9" font-size="10" class="mono">UPDATE products SET stock_quantity = stock_quantity...</text>
+  <text x="740" y="729" fill="#3FB950" font-size="10" class="mono">0.001s</text>
+  <rect x="830" y="718" width="56" height="16" rx="8" fill="#3FB95018"/>
+  <text x="858" y="730" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">executing</text>
+  <rect x="940" y="717" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="730" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Row 6 -->
+  <rect x="20" y="741" width="1060" height="34" fill="#0D1117"/>
+  <text x="36" y="763" fill="#8B949E" font-size="10" class="mono">4531</text>
+  <text x="96" y="763" fill="#E6EDF3" font-size="10" class="mono">analytics</text>
+  <text x="196" y="763" fill="#E6EDF3" font-size="10" class="mono">warehouse</text>
+  <text x="320" y="763" fill="#C9D1D9" font-size="10" class="mono">SELECT DATE(created_at), COUNT(*) FROM orders...</text>
+  <text x="740" y="763" fill="#3FB950" font-size="10" class="mono">2.1s</text>
+  <rect x="830" y="752" width="56" height="16" rx="8" fill="#3FB95018"/>
+  <text x="858" y="764" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">executing</text>
+  <rect x="940" y="751" width="36" height="18" rx="3" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="958" y="764" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Kill</text>
+
+  <!-- Panel 2: Server Info -->
+  <rect x="1100" y="510" width="480" height="460" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1100" y="510" width="3" height="36" rx="2" fill="#79C0FF"/>
+  <text x="1116" y="533" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">SERVER INFO</text>
+  <rect x="1100" y="545" width="480" height="1" fill="#1E2D45"/>
+
+  <!-- Server info rows -->
+  <text x="1120" y="574" fill="#8B949E" font-size="11" class="ui">Server</text>
+  <text x="1540" y="574" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">MySQL 8.0.35</text>
+
+  <rect x="1120" y="584" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="610" fill="#8B949E" font-size="11" class="ui">Uptime</text>
+  <text x="1540" y="610" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">47d 12h 33m</text>
+
+  <rect x="1120" y="620" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="646" fill="#8B949E" font-size="11" class="ui">Threads</text>
+  <text x="1540" y="646" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">24 / 151</text>
+
+  <rect x="1120" y="656" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="682" fill="#8B949E" font-size="11" class="ui">Buffer Pool</text>
+  <text x="1400" y="682" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">2.4 GB / 4 GB</text>
+  <rect x="1410" y="676" width="130" height="4" rx="2" fill="#1C2333"/>
+  <rect x="1410" y="676" width="78" height="4" rx="2" fill="#3FB950"/>
+
+  <rect x="1120" y="692" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="718" fill="#8B949E" font-size="11" class="ui">Slow Queries</text>
+  <text x="1540" y="718" fill="#F5A623" font-size="12" font-weight="600" text-anchor="end" class="mono">142</text>
+
+  <rect x="1120" y="728" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="754" fill="#8B949E" font-size="11" class="ui">Table Cache</text>
+  <text x="1400" y="754" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">89%</text>
+  <rect x="1410" y="748" width="130" height="4" rx="2" fill="#1C2333"/>
+  <rect x="1410" y="748" width="116" height="4" rx="2" fill="#3FB950"/>
+
+  <rect x="1120" y="764" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="790" fill="#8B949E" font-size="11" class="ui">Open Files</text>
+  <text x="1540" y="790" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">1,247 / 65,535</text>
+
+  <rect x="1120" y="800" width="440" height="1" fill="#1E2D4530"/>
+  <text x="1120" y="826" fill="#8B949E" font-size="11" class="ui">Connections Used</text>
+  <text x="1400" y="826" fill="#E6EDF3" font-size="12" text-anchor="end" class="mono">24%</text>
+  <rect x="1410" y="820" width="130" height="4" rx="2" fill="#1C2333"/>
+  <rect x="1410" y="820" width="31" height="4" rx="2" fill="#2DD4BF"/>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#3FB950"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">prod-main-db</text>
+  <text x="120" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="132" y="994" fill="#8B949E" font-size="10" class="ui">MySQL 8.0.35</text>
+  <text x="240" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="252" y="994" fill="#8B949E" font-size="10" class="ui">Uptime: 47d 12h 33m</text>
+  <text x="400" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="412" y="994" fill="#8B949E" font-size="10" class="ui">24 connections</text>
+  <text x="520" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="532" y="994" fill="#3FB950" font-size="10" class="ui">Auto-refresh: 10s</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 7 — AI QUERY ANALYZER                                  -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot"></div><span>SCREEN 7 — AI QUERY ANALYZER</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" class="ui">Connections</text>
+  <text x="310" y="27" fill="#8B949E" font-size="12" class="ui">Navigator</text>
+  <text x="400" y="27" fill="#8B949E" font-size="12" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">AI Analyze</text>
+  <rect x="560" y="41" width="74" height="2" fill="#BC8CFF"/>
+  <!-- Connection selector -->
+  <rect x="1180" y="10" width="200" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <circle cx="1194" cy="22" r="4" fill="#2DD4BF"/>
+  <text x="1204" y="26" fill="#E6EDF3" font-size="11" class="mono">prod-main-db (MySQL)</text>
+
+  <!-- ═══ LEFT PANEL: ORIGINAL QUERY (w=480) ═══ -->
+  <rect x="0" y="44" width="480" height="936" fill="#070B14"/>
+  <rect x="480" y="44" width="1" height="936" fill="#1E2D45"/>
+
+  <!-- Panel header -->
+  <rect x="0" y="44" width="3" height="36" fill="#BC8CFF"/>
+  <text x="14" y="67" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">ORIGINAL QUERY</text>
+  <rect x="0" y="79" width="480" height="1" fill="#1E2D45"/>
+
+  <!-- Line numbers gutter -->
+  <rect x="0" y="80" width="32" height="400" fill="#0D1117"/>
+  <rect x="32" y="80" width="1" height="400" fill="#1E2D45"/>
+
+  <!-- Line numbers -->
+  <text x="26" y="100" fill="#4A5568" font-size="10" text-anchor="end" class="mono">1</text>
+  <text x="26" y="118" fill="#4A5568" font-size="10" text-anchor="end" class="mono">2</text>
+  <text x="26" y="136" fill="#4A5568" font-size="10" text-anchor="end" class="mono">3</text>
+  <text x="26" y="154" fill="#4A5568" font-size="10" text-anchor="end" class="mono">4</text>
+  <text x="26" y="172" fill="#4A5568" font-size="10" text-anchor="end" class="mono">5</text>
+  <text x="26" y="190" fill="#4A5568" font-size="10" text-anchor="end" class="mono">6</text>
+  <text x="26" y="208" fill="#4A5568" font-size="10" text-anchor="end" class="mono">7</text>
+  <text x="26" y="226" fill="#4A5568" font-size="10" text-anchor="end" class="mono">8</text>
+  <text x="26" y="244" fill="#4A5568" font-size="10" text-anchor="end" class="mono">9</text>
+  <text x="26" y="262" fill="#4A5568" font-size="10" text-anchor="end" class="mono">10</text>
+  <text x="26" y="280" fill="#4A5568" font-size="10" text-anchor="end" class="mono">11</text>
+  <text x="26" y="298" fill="#4A5568" font-size="10" text-anchor="end" class="mono">12</text>
+  <text x="26" y="316" fill="#4A5568" font-size="10" text-anchor="end" class="mono">13</text>
+  <text x="26" y="334" fill="#4A5568" font-size="10" text-anchor="end" class="mono">14</text>
+
+  <!-- Bad SQL query (red-tinted line highlights for problematic lines) -->
+  <!-- Line 1: SELECT * (problematic) -->
+  <rect x="33" y="88" width="447" height="16" fill="#F8514908"/>
+  <text x="40" y="100" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">SELECT</text>
+  <text x="85" y="100" fill="#F85149" font-size="10" font-weight="600" class="mono"> *</text>
+  <!-- Line 2 -->
+  <text x="40" y="118" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">FROM</text>
+  <text x="72" y="118" fill="#E6EDF3" font-size="10" class="mono"> orders</text>
+  <text x="120" y="118" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <!-- Line 3 -->
+  <text x="40" y="136" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">WHERE</text>
+  <text x="78" y="136" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="86" y="136" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="92" y="136" fill="#E6EDF3" font-size="10" class="mono">status</text>
+  <text x="134" y="136" fill="#8B949E" font-size="10" class="mono"> = </text>
+  <text x="155" y="136" fill="#3FB950" font-size="10" class="mono">'completed'</text>
+  <!-- Line 4 -->
+  <text x="52" y="154" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">AND</text>
+  <text x="78" y="154" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="86" y="154" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="92" y="154" fill="#E6EDF3" font-size="10" class="mono">total_amount</text>
+  <text x="170" y="154" fill="#8B949E" font-size="10" class="mono"> > </text>
+  <text x="190" y="154" fill="#F5A623" font-size="10" class="mono">100</text>
+  <!-- Line 5: N+1 subquery (problematic) -->
+  <rect x="33" y="160" width="447" height="52" fill="#F8514908"/>
+  <text x="52" y="172" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">AND</text>
+  <text x="78" y="172" fill="#E6EDF3" font-size="10" class="mono"> (</text>
+  <!-- Line 6 -->
+  <text x="64" y="190" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">SELECT</text>
+  <text x="109" y="190" fill="#BC8CFF" font-size="10" class="mono"> COUNT</text>
+  <text x="149" y="190" fill="#8B949E" font-size="10" class="mono">(*)</text>
+  <!-- Line 7 -->
+  <text x="64" y="208" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">FROM</text>
+  <text x="96" y="208" fill="#E6EDF3" font-size="10" class="mono"> order_items</text>
+  <text x="170" y="208" fill="#2DD4BF" font-size="10" class="mono"> oi</text>
+  <!-- Line 8 -->
+  <text x="64" y="226" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">WHERE</text>
+  <text x="102" y="226" fill="#2DD4BF" font-size="10" class="mono"> oi</text>
+  <text x="116" y="226" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="122" y="226" fill="#E6EDF3" font-size="10" class="mono">order_id</text>
+  <text x="178" y="226" fill="#8B949E" font-size="10" class="mono"> = </text>
+  <text x="198" y="226" fill="#2DD4BF" font-size="10" class="mono">o</text>
+  <text x="206" y="226" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="212" y="226" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <!-- Line 9 -->
+  <text x="52" y="244" fill="#E6EDF3" font-size="10" class="mono">) > </text>
+  <text x="80" y="244" fill="#F5A623" font-size="10" class="mono">3</text>
+  <!-- Line 10 -->
+  <text x="40" y="262" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">ORDER BY</text>
+  <text x="108" y="262" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="116" y="262" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="122" y="262" fill="#E6EDF3" font-size="10" class="mono">created_at</text>
+  <text x="195" y="262" fill="#4F9EFF" font-size="10" font-weight="600" class="mono"> DESC</text>
+  <!-- Line 11: No LIMIT (problematic) -->
+  <rect x="33" y="268" width="447" height="16" fill="#F5A62308"/>
+  <text x="40" y="280" fill="#BC8CFF" font-size="10" class="mono">-- no LIMIT clause!</text>
+
+  <!-- Analyze button -->
+  <rect x="16" y="320" width="100" height="28" rx="5" fill="#BC8CFF"/>
+  <text x="66" y="338" fill="#070B14" font-size="11" font-weight="600" text-anchor="middle" class="ui">✦ Analyze</text>
+  <rect x="126" y="320" width="100" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="176" y="338" fill="#8B949E" font-size="11" font-weight="500" text-anchor="middle" class="ui">Explain Plan</text>
+
+  <!-- Execution Plan preview -->
+  <rect x="10" y="366" width="460" height="1" fill="#1E2D45"/>
+  <rect x="10" y="367" width="3" height="30" fill="#F5A623"/>
+  <text x="24" y="387" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">EXECUTION PLAN</text>
+  <rect x="10" y="396" width="460" height="1" fill="#1E2D45"/>
+
+  <!-- Plan table headers -->
+  <rect x="10" y="397" width="460" height="20" fill="#111827"/>
+  <text x="20" y="411" fill="#8B949E" font-size="9" font-weight="600" class="ui">TABLE</text>
+  <text x="110" y="411" fill="#8B949E" font-size="9" font-weight="600" class="ui">TYPE</text>
+  <text x="180" y="411" fill="#8B949E" font-size="9" font-weight="600" class="ui">ROWS</text>
+  <text x="240" y="411" fill="#8B949E" font-size="9" font-weight="600" class="ui">KEY</text>
+  <text x="340" y="411" fill="#8B949E" font-size="9" font-weight="600" class="ui">EXTRA</text>
+
+  <!-- Plan row 1 (ALL - bad) -->
+  <rect x="10" y="417" width="460" height="22" fill="#070B14"/>
+  <text x="20" y="432" fill="#E6EDF3" font-size="10" class="mono">orders</text>
+  <rect x="110" y="423" width="28" height="14" rx="3" fill="#F8514918"/>
+  <text x="124" y="434" fill="#F85149" font-size="9" font-weight="600" text-anchor="middle" class="mono">ALL</text>
+  <text x="180" y="432" fill="#F85149" font-size="10" class="mono">8,432</text>
+  <text x="240" y="432" fill="#4A5568" font-size="10" font-style="italic" class="mono">NULL</text>
+  <text x="340" y="432" fill="#F85149" font-size="9" class="mono">Using where; filesort</text>
+
+  <!-- Plan row 2 -->
+  <rect x="10" y="439" width="460" height="22" fill="#0D1117"/>
+  <text x="20" y="454" fill="#E6EDF3" font-size="10" class="mono">order_items</text>
+  <rect x="110" y="445" width="28" height="14" rx="3" fill="#F5A62318"/>
+  <text x="124" y="456" fill="#F5A623" font-size="9" font-weight="600" text-anchor="middle" class="mono">ref</text>
+  <text x="180" y="454" fill="#F5A623" font-size="10" class="mono">~6</text>
+  <text x="240" y="454" fill="#8B949E" font-size="10" class="mono">order_id</text>
+  <text x="340" y="454" fill="#8B949E" font-size="9" class="mono">Using where</text>
+
+  <!-- ═══ CENTER PANEL: AI ANALYSIS (w=440) ═══ -->
+  <rect x="481" y="44" width="440" height="936" fill="#0D1117"/>
+  <rect x="921" y="44" width="1" height="936" fill="#1E2D45"/>
+
+  <!-- Panel header -->
+  <rect x="481" y="44" width="3" height="36" fill="#BC8CFF"/>
+  <text x="496" y="67" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">AI ANALYSIS</text>
+  <!-- Powered by badge -->
+  <rect x="830" y="52" width="76" height="18" rx="9" fill="#BC8CFF18" stroke="#BC8CFF30" stroke-width="1"/>
+  <circle cx="842" cy="61" r="3" fill="#BC8CFF"/>
+  <text x="876" y="65" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Claude</text>
+  <rect x="481" y="79" width="440" height="1" fill="#1E2D45"/>
+
+  <!-- Performance Score (circular gauge) -->
+  <circle cx="700" cy="150" r="44" fill="none" stroke="#1C2333" stroke-width="6"/>
+  <circle cx="700" cy="150" r="44" fill="none" stroke="#F85149" stroke-width="6"
+    stroke-dasharray="94 183" stroke-dashoffset="69" transform="rotate(-90 700 150)"/>
+  <text x="700" y="148" fill="#F85149" font-size="24" font-weight="700" text-anchor="middle" class="mono">34</text>
+  <text x="700" y="164" fill="#4A5568" font-size="10" text-anchor="middle" class="ui">/100</text>
+  <text x="700" y="210" fill="#F85149" font-size="12" font-weight="700" text-anchor="middle" class="ui">Poor Performance</text>
+
+  <!-- Issues Found section -->
+  <rect x="491" y="230" width="420" height="1" fill="#1E2D45"/>
+  <text x="496" y="250" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">ISSUES FOUND</text>
+  <rect x="856" y="238" width="14" height="14" rx="7" fill="#F8514918"/>
+  <text x="863" y="249" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="ui">5</text>
+
+  <!-- Issue 1: Full Table Scan (critical) -->
+  <rect x="496" y="262" width="410" height="72" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="496" y="262" width="3" height="72" rx="2" fill="#F85149"/>
+  <rect x="848" y="268" width="48" height="14" rx="7" fill="#F8514918"/>
+  <text x="872" y="279" fill="#F85149" font-size="8" font-weight="600" text-anchor="middle" class="ui">Critical</text>
+  <text x="512" y="280" fill="#E6EDF3" font-size="11" font-weight="700" class="ui">Full Table Scan</text>
+  <text x="512" y="296" fill="#8B949E" font-size="10" class="ui">SELECT * on orders (8,432 rows)</text>
+  <text x="512" y="310" fill="#8B949E" font-size="10" class="ui">causes full scan. No index on status.</text>
+  <text x="512" y="326" fill="#4A5568" font-size="9" class="mono">EXPLAIN → type: ALL, rows: 8432</text>
+
+  <!-- Issue 2: N+1 Subquery (critical) -->
+  <rect x="496" y="342" width="410" height="72" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="496" y="342" width="3" height="72" rx="2" fill="#F85149"/>
+  <rect x="848" y="348" width="48" height="14" rx="7" fill="#F8514918"/>
+  <text x="872" y="359" fill="#F85149" font-size="8" font-weight="600" text-anchor="middle" class="ui">Critical</text>
+  <text x="512" y="360" fill="#E6EDF3" font-size="11" font-weight="700" class="ui">N+1 Correlated Subquery</text>
+  <text x="512" y="376" fill="#8B949E" font-size="10" class="ui">Subquery in WHERE executes per-row.</text>
+  <text x="512" y="390" fill="#8B949E" font-size="10" class="ui">Replace with JOIN for ~94% improvement.</text>
+  <text x="512" y="406" fill="#4A5568" font-size="9" class="mono">Impact: 8,432 subquery executions</text>
+
+  <!-- Issue 3: Missing LIMIT (warning) -->
+  <rect x="496" y="422" width="410" height="58" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="496" y="422" width="3" height="58" rx="2" fill="#F5A623"/>
+  <rect x="848" y="428" width="48" height="14" rx="7" fill="#F5A62318"/>
+  <text x="872" y="439" fill="#F5A623" font-size="8" font-weight="600" text-anchor="middle" class="ui">Warning</text>
+  <text x="512" y="440" fill="#E6EDF3" font-size="11" font-weight="700" class="ui">Missing LIMIT Clause</text>
+  <text x="512" y="456" fill="#8B949E" font-size="10" class="ui">Returns all rows. Add LIMIT for pagination.</text>
+  <text x="512" y="472" fill="#4A5568" font-size="9" class="mono">Potential rows returned: 8,432</text>
+
+  <!-- Issue 4: Unnecessary columns (warning) -->
+  <rect x="496" y="488" width="410" height="58" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="496" y="488" width="3" height="58" rx="2" fill="#F5A623"/>
+  <rect x="848" y="494" width="48" height="14" rx="7" fill="#F5A62318"/>
+  <text x="872" y="505" fill="#F5A623" font-size="8" font-weight="600" text-anchor="middle" class="ui">Warning</text>
+  <text x="512" y="506" fill="#E6EDF3" font-size="11" font-weight="700" class="ui">Unnecessary Columns</text>
+  <text x="512" y="522" fill="#8B949E" font-size="10" class="ui">SELECT * fetches 12 cols, only 4 used.</text>
+  <text x="512" y="538" fill="#4A5568" font-size="9" class="mono">Wasted bandwidth: ~68% per row</text>
+
+  <!-- Issue 5: Index suggestion (info) -->
+  <rect x="496" y="554" width="410" height="58" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="496" y="554" width="3" height="58" rx="2" fill="#4F9EFF"/>
+  <rect x="848" y="560" width="48" height="14" rx="7" fill="#4F9EFF18"/>
+  <text x="872" y="571" fill="#4F9EFF" font-size="8" font-weight="600" text-anchor="middle" class="ui">Suggest</text>
+  <text x="512" y="572" fill="#E6EDF3" font-size="11" font-weight="700" class="ui">Index Suggestion</text>
+  <text x="512" y="588" fill="#8B949E" font-size="10" class="ui">Add index on orders(status, total_amount)</text>
+  <text x="512" y="604" fill="#3FB950" font-size="9" class="mono">Est. improvement: ~94% faster</text>
+
+  <!-- Estimated Impact -->
+  <rect x="491" y="626" width="420" height="1" fill="#1E2D45"/>
+  <text x="496" y="650" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">ESTIMATED IMPACT</text>
+  <rect x="496" y="662" width="200" height="40" rx="6" fill="#3FB95010" stroke="#3FB95030" stroke-width="1"/>
+  <text x="596" y="680" fill="#3FB950" font-size="16" font-weight="700" text-anchor="middle" class="mono">~94%</text>
+  <text x="596" y="696" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">faster execution</text>
+  <rect x="706" y="662" width="200" height="40" rx="6" fill="#3FB95010" stroke="#3FB95030" stroke-width="1"/>
+  <text x="806" y="680" fill="#3FB950" font-size="12" font-weight="700" text-anchor="middle" class="mono">8,432 → ~250</text>
+  <text x="806" y="696" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">rows scanned</text>
+
+  <!-- ═══ RIGHT PANEL: OPTIMIZED QUERY (w=678) ═══ -->
+  <!-- Panel header -->
+  <rect x="922" y="44" width="3" height="36" fill="#3FB950"/>
+  <text x="938" y="67" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">OPTIMIZED QUERY</text>
+  <!-- Action buttons -->
+  <rect x="1370" y="52" width="50" height="22" rx="4" fill="#2DD4BF"/>
+  <text x="1395" y="67" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">Apply</text>
+  <rect x="1428" y="52" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1451" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Copy</text>
+  <rect x="1482" y="52" width="40" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1502" y="67" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Diff</text>
+  <rect x="922" y="79" width="678" height="1" fill="#1E2D45"/>
+
+  <!-- Line numbers gutter -->
+  <rect x="922" y="80" width="32" height="400" fill="#0D1117"/>
+  <rect x="954" y="80" width="1" height="400" fill="#1E2D45"/>
+
+  <text x="948" y="100" fill="#4A5568" font-size="10" text-anchor="end" class="mono">1</text>
+  <text x="948" y="118" fill="#4A5568" font-size="10" text-anchor="end" class="mono">2</text>
+  <text x="948" y="136" fill="#4A5568" font-size="10" text-anchor="end" class="mono">3</text>
+  <text x="948" y="154" fill="#4A5568" font-size="10" text-anchor="end" class="mono">4</text>
+  <text x="948" y="172" fill="#4A5568" font-size="10" text-anchor="end" class="mono">5</text>
+  <text x="948" y="190" fill="#4A5568" font-size="10" text-anchor="end" class="mono">6</text>
+  <text x="948" y="208" fill="#4A5568" font-size="10" text-anchor="end" class="mono">7</text>
+  <text x="948" y="226" fill="#4A5568" font-size="10" text-anchor="end" class="mono">8</text>
+  <text x="948" y="244" fill="#4A5568" font-size="10" text-anchor="end" class="mono">9</text>
+  <text x="948" y="262" fill="#4A5568" font-size="10" text-anchor="end" class="mono">10</text>
+  <text x="948" y="280" fill="#4A5568" font-size="10" text-anchor="end" class="mono">11</text>
+  <text x="948" y="298" fill="#4A5568" font-size="10" text-anchor="end" class="mono">12</text>
+  <text x="948" y="316" fill="#4A5568" font-size="10" text-anchor="end" class="mono">13</text>
+  <text x="948" y="334" fill="#4A5568" font-size="10" text-anchor="end" class="mono">14</text>
+  <text x="948" y="352" fill="#4A5568" font-size="10" text-anchor="end" class="mono">15</text>
+  <text x="948" y="370" fill="#4A5568" font-size="10" text-anchor="end" class="mono">16</text>
+
+  <!-- Optimized SQL with green highlights on changed lines -->
+  <!-- Line 1: comment -->
+  <text x="962" y="100" fill="#BC8CFF" font-size="10" class="mono">-- Optimized: replaced SELECT * with specific cols</text>
+  <!-- Line 2: SELECT (green bg - changed) -->
+  <rect x="955" y="106" width="645" height="16" fill="#3FB95008"/>
+  <text x="962" y="118" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">SELECT</text>
+  <!-- Line 3: specific columns -->
+  <rect x="955" y="124" width="645" height="16" fill="#3FB95008"/>
+  <text x="974" y="136" fill="#2DD4BF" font-size="10" class="mono">o</text>
+  <text x="982" y="136" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="988" y="136" fill="#E6EDF3" font-size="10" class="mono">id,</text>
+  <text x="1010" y="136" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1020" y="136" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1026" y="136" fill="#E6EDF3" font-size="10" class="mono">total_amount,</text>
+  <text x="1113" y="136" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1123" y="136" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1129" y="136" fill="#E6EDF3" font-size="10" class="mono">status,</text>
+  <text x="1173" y="136" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1183" y="136" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1189" y="136" fill="#E6EDF3" font-size="10" class="mono">created_at,</text>
+  <!-- Line 4 -->
+  <rect x="955" y="142" width="645" height="16" fill="#3FB95008"/>
+  <text x="974" y="154" fill="#BC8CFF" font-size="10" class="mono">COUNT</text>
+  <text x="1010" y="154" fill="#8B949E" font-size="10" class="mono">(</text>
+  <text x="1016" y="154" fill="#2DD4BF" font-size="10" class="mono">oi</text>
+  <text x="1028" y="154" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1034" y="154" fill="#E6EDF3" font-size="10" class="mono">id)</text>
+  <text x="1056" y="154" fill="#4F9EFF" font-size="10" font-weight="600" class="mono"> AS</text>
+  <text x="1080" y="154" fill="#E6EDF3" font-size="10" class="mono"> item_count</text>
+  <!-- Line 5: FROM -->
+  <text x="962" y="172" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">FROM</text>
+  <text x="994" y="172" fill="#E6EDF3" font-size="10" class="mono"> orders</text>
+  <text x="1042" y="172" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <!-- Line 6: JOIN instead of subquery (green - changed) -->
+  <rect x="955" y="178" width="645" height="16" fill="#3FB95008"/>
+  <text x="962" y="190" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">INNER JOIN</text>
+  <text x="1040" y="190" fill="#E6EDF3" font-size="10" class="mono"> order_items</text>
+  <text x="1115" y="190" fill="#2DD4BF" font-size="10" class="mono"> oi</text>
+  <text x="1133" y="190" fill="#4F9EFF" font-size="10" font-weight="600" class="mono"> ON</text>
+  <text x="1155" y="190" fill="#2DD4BF" font-size="10" class="mono"> oi</text>
+  <text x="1169" y="190" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1175" y="190" fill="#E6EDF3" font-size="10" class="mono">order_id</text>
+  <text x="1229" y="190" fill="#8B949E" font-size="10" class="mono"> = </text>
+  <text x="1249" y="190" fill="#2DD4BF" font-size="10" class="mono">o</text>
+  <text x="1257" y="190" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1263" y="190" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <!-- Line 7: WHERE -->
+  <text x="962" y="208" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">WHERE</text>
+  <text x="1000" y="208" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1008" y="208" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1014" y="208" fill="#E6EDF3" font-size="10" class="mono">status</text>
+  <text x="1056" y="208" fill="#8B949E" font-size="10" class="mono"> = </text>
+  <text x="1077" y="208" fill="#3FB950" font-size="10" class="mono">'completed'</text>
+  <!-- Line 8 -->
+  <text x="974" y="226" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">AND</text>
+  <text x="1000" y="226" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1008" y="226" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1014" y="226" fill="#E6EDF3" font-size="10" class="mono">total_amount</text>
+  <text x="1092" y="226" fill="#8B949E" font-size="10" class="mono"> > </text>
+  <text x="1112" y="226" fill="#F5A623" font-size="10" class="mono">100</text>
+  <!-- Line 9: GROUP BY (new) -->
+  <rect x="955" y="232" width="645" height="16" fill="#3FB95008"/>
+  <text x="962" y="244" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">GROUP BY</text>
+  <text x="1020" y="244" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1028" y="244" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1034" y="244" fill="#E6EDF3" font-size="10" class="mono">id</text>
+  <!-- Line 10: HAVING (replaces correlated subquery) -->
+  <rect x="955" y="250" width="645" height="16" fill="#3FB95008"/>
+  <text x="962" y="262" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">HAVING</text>
+  <text x="1006" y="262" fill="#BC8CFF" font-size="10" class="mono"> COUNT</text>
+  <text x="1046" y="262" fill="#8B949E" font-size="10" class="mono">(</text>
+  <text x="1052" y="262" fill="#2DD4BF" font-size="10" class="mono">oi</text>
+  <text x="1064" y="262" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1070" y="262" fill="#E6EDF3" font-size="10" class="mono">id)</text>
+  <text x="1092" y="262" fill="#8B949E" font-size="10" class="mono"> > </text>
+  <text x="1112" y="262" fill="#F5A623" font-size="10" class="mono">3</text>
+  <!-- Line 11: ORDER BY -->
+  <text x="962" y="280" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">ORDER BY</text>
+  <text x="1030" y="280" fill="#2DD4BF" font-size="10" class="mono"> o</text>
+  <text x="1038" y="280" fill="#8B949E" font-size="10" class="mono">.</text>
+  <text x="1044" y="280" fill="#E6EDF3" font-size="10" class="mono">created_at</text>
+  <text x="1117" y="280" fill="#4F9EFF" font-size="10" font-weight="600" class="mono"> DESC</text>
+  <!-- Line 12: LIMIT (new - green) -->
+  <rect x="955" y="286" width="645" height="16" fill="#3FB95008"/>
+  <text x="962" y="298" fill="#4F9EFF" font-size="10" font-weight="600" class="mono">LIMIT</text>
+  <text x="1000" y="298" fill="#F5A623" font-size="10" class="mono"> 50</text>
+  <text x="1018" y="298" fill="#8B949E" font-size="10" class="mono">;</text>
+
+  <!-- Comparison metrics -->
+  <rect x="932" y="400" width="320" height="1" fill="#1E2D45"/>
+  <text x="938" y="424" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">COMPARISON</text>
+
+  <!-- Before card -->
+  <rect x="938" y="436" width="200" height="120" rx="6" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="938" y="436" width="200" height="26" rx="6" fill="#111827"/>
+  <rect x="938" y="456" width="200" height="6" fill="#111827"/>
+  <text x="1038" y="454" fill="#8B949E" font-size="10" font-weight="700" text-anchor="middle" class="ui">BEFORE</text>
+  <text x="952" y="480" fill="#4A5568" font-size="9" class="ui">Execution</text>
+  <text x="1124" y="480" fill="#F85149" font-size="10" font-weight="600" text-anchor="end" class="mono">2.4s</text>
+  <text x="952" y="498" fill="#4A5568" font-size="9" class="ui">Rows scanned</text>
+  <text x="1124" y="498" fill="#F85149" font-size="10" font-weight="600" text-anchor="end" class="mono">8,432</text>
+  <text x="952" y="516" fill="#4A5568" font-size="9" class="ui">Temp tables</text>
+  <text x="1124" y="516" fill="#F85149" font-size="10" font-weight="600" text-anchor="end" class="mono">Yes</text>
+  <text x="952" y="534" fill="#4A5568" font-size="9" class="ui">Filesort</text>
+  <text x="1124" y="534" fill="#F85149" font-size="10" font-weight="600" text-anchor="end" class="mono">Yes</text>
+
+  <!-- After card -->
+  <rect x="1150" y="436" width="200" height="120" rx="6" fill="#070B14" stroke="#3FB95030" stroke-width="1"/>
+  <rect x="1150" y="436" width="200" height="26" rx="6" fill="#3FB95010"/>
+  <rect x="1150" y="456" width="200" height="6" fill="#3FB95010"/>
+  <text x="1250" y="454" fill="#3FB950" font-size="10" font-weight="700" text-anchor="middle" class="ui">AFTER</text>
+  <text x="1164" y="480" fill="#4A5568" font-size="9" class="ui">Execution</text>
+  <text x="1336" y="480" fill="#3FB950" font-size="10" font-weight="600" text-anchor="end" class="mono">0.08s</text>
+  <text x="1164" y="498" fill="#4A5568" font-size="9" class="ui">Rows scanned</text>
+  <text x="1336" y="498" fill="#3FB950" font-size="10" font-weight="600" text-anchor="end" class="mono">~250</text>
+  <text x="1164" y="516" fill="#4A5568" font-size="9" class="ui">Temp tables</text>
+  <text x="1336" y="516" fill="#3FB950" font-size="10" font-weight="600" text-anchor="end" class="mono">No</text>
+  <text x="1164" y="534" fill="#4A5568" font-size="9" class="ui">Filesort</text>
+  <text x="1336" y="534" fill="#3FB950" font-size="10" font-weight="600" text-anchor="end" class="mono">No</text>
+
+  <!-- Suggested Indexes -->
+  <rect x="932" y="574" width="660" height="1" fill="#1E2D45"/>
+  <rect x="932" y="575" width="3" height="30" fill="#2DD4BF"/>
+  <text x="948" y="595" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">SUGGESTED INDEXES</text>
+  <rect x="932" y="604" width="660" height="1" fill="#1E2D45"/>
+
+  <!-- Index 1 -->
+  <rect x="938" y="614" width="640" height="36" rx="5" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <text x="952" y="637" fill="#2DD4BF" font-size="10" class="mono">CREATE INDEX idx_orders_status_amount ON orders(status, total_amount);</text>
+  <rect x="1518" y="620" width="46" height="22" rx="4" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="1541" y="635" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Run</text>
+
+  <!-- Index 2 -->
+  <rect x="938" y="658" width="640" height="36" rx="5" fill="#070B14" stroke="#1E2D45" stroke-width="1"/>
+  <text x="952" y="681" fill="#2DD4BF" font-size="10" class="mono">CREATE INDEX idx_order_items_order ON order_items(order_id);</text>
+  <rect x="1518" y="664" width="46" height="22" rx="4" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="1541" y="679" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Run</text>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#BC8CFF"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">AI Analysis</text>
+  <text x="100" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="112" y="994" fill="#BC8CFF" font-size="10" class="ui">Claude Sonnet 4.6</text>
+  <text x="224" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="236" y="994" fill="#8B949E" font-size="10" class="ui">Analysis: 1.2s</text>
+  <text x="330" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="342" y="994" fill="#F85149" font-size="10" class="ui">2 critical</text>
+  <text x="410" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="422" y="994" fill="#F5A623" font-size="10" class="ui">2 warnings</text>
+  <text x="500" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="512" y="994" fill="#4F9EFF" font-size="10" class="ui">1 suggestion</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 8 — HISTORY                                            -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#BC8CFF"></div><span>SCREEN 8 — HISTORY</span></div>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#070B14"/>
+
+  <!-- ── NAVBAR ── -->
+  <rect x="0" y="0" width="1600" height="44" fill="#111827"/>
+  <rect x="0" y="43" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="20" cy="22" r="5" fill="#2DD4BF"/>
+  <text x="32" y="27" fill="#E6EDF3" font-size="13" font-weight="700" class="ui">KawaiiDB</text>
+  <text x="200" y="27" fill="#8B949E" font-size="12" class="ui">Connections</text>
+  <text x="310" y="27" fill="#8B949E" font-size="12" class="ui">Navigator</text>
+  <text x="400" y="27" fill="#8B949E" font-size="12" class="ui">Query</text>
+  <text x="470" y="27" fill="#8B949E" font-size="12" class="ui">Dashboard</text>
+  <text x="560" y="27" fill="#8B949E" font-size="12" class="ui">AI Analyze</text>
+  <text x="654" y="27" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">History</text>
+  <rect x="654" y="41" width="46" height="2" fill="#BC8CFF"/>
+
+  <!-- ── TOOLBAR h=52 ── -->
+  <rect x="0" y="44" width="1600" height="52" fill="#0D1117"/>
+  <rect x="0" y="95" width="1600" height="1" fill="#1E2D45"/>
+  <rect x="0" y="44" width="3" height="52" fill="#BC8CFF"/>
+  <text x="16" y="67" fill="#E6EDF3" font-size="14" font-weight="700" class="ui">Analysis History</text>
+  <text x="16" y="84" fill="#4A5568" font-size="10" class="ui">Click any row to reopen in AI Analyze</text>
+  <!-- Search -->
+  <rect x="340" y="56" width="260" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="354" y="74" fill="#4A5568" font-size="11" class="ui">Search history...</text>
+  <!-- Filter pills -->
+  <rect x="620" y="58" width="36" height="22" rx="9" fill="#BC8CFF18" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="638" y="73" fill="#BC8CFF" font-size="10" font-weight="600" text-anchor="middle" class="ui">All</text>
+  <rect x="666" y="58" width="56" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="694" y="73" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Optimized</text>
+  <rect x="732" y="58" width="48" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="756" y="73" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Applied</text>
+  <rect x="790" y="58" width="52" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="816" y="73" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Indexed</text>
+  <rect x="852" y="58" width="56" height="22" rx="9" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="880" y="73" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Dismissed</text>
+  <!-- Right side -->
+  <rect x="1398" y="56" width="80" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1438" y="74" fill="#8B949E" font-size="10" font-weight="500" text-anchor="middle" class="ui">Export CSV</text>
+  <rect x="1488" y="56" width="90" height="28" rx="5" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="1533" y="74" fill="#F85149" font-size="10" font-weight="500" text-anchor="middle" class="ui">Clear History</text>
+
+  <!-- ── SUMMARY CARDS (4) ── -->
+  <rect x="20" y="108" width="240" height="56" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="20" y="108" width="3" height="56" rx="2" fill="#BC8CFF"/>
+  <text x="36" y="128" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">TOTAL ANALYSES</text>
+  <text x="36" y="152" fill="#E6EDF3" font-size="22" font-weight="700" class="mono">47</text>
+  <text x="86" y="152" fill="#3FB950" font-size="10" class="ui">↑ 8 this week</text>
+
+  <rect x="280" y="108" width="240" height="56" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="280" y="108" width="3" height="56" rx="2" fill="#3FB950"/>
+  <text x="296" y="128" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">OPTIMIZATIONS APPLIED</text>
+  <text x="296" y="152" fill="#3FB950" font-size="22" font-weight="700" class="mono">31</text>
+  <text x="346" y="152" fill="#4A5568" font-size="10" class="ui">66% apply rate</text>
+
+  <rect x="540" y="108" width="240" height="56" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="540" y="108" width="3" height="56" rx="2" fill="#2DD4BF"/>
+  <text x="556" y="128" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">INDEXES CREATED</text>
+  <text x="556" y="152" fill="#2DD4BF" font-size="22" font-weight="700" class="mono">12</text>
+  <text x="600" y="152" fill="#4A5568" font-size="10" class="ui">across 4 tables</text>
+
+  <rect x="800" y="108" width="240" height="56" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="800" y="108" width="3" height="56" rx="2" fill="#4F9EFF"/>
+  <text x="816" y="128" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">AVG IMPROVEMENT</text>
+  <text x="816" y="152" fill="#4F9EFF" font-size="22" font-weight="700" class="mono">78%</text>
+  <text x="870" y="152" fill="#3FB950" font-size="10" class="ui">faster avg execution</text>
+
+  <!-- ── HISTORY TABLE ── -->
+  <!-- Table header -->
+  <rect x="20" y="180" width="1560" height="28" fill="#111827" rx="6"/>
+  <text x="40" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">STATUS</text>
+  <text x="130" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">SCORE</text>
+  <text x="200" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">QUERY PREVIEW</text>
+  <text x="740" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">CONNECTION</text>
+  <text x="900" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">DATABASE</text>
+  <text x="1040" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">ISSUES</text>
+  <text x="1160" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">IMPROVEMENT</text>
+  <text x="1300" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">DATE</text>
+  <text x="1470" y="198" fill="#8B949E" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">ACTIONS</text>
+  <rect x="20" y="208" width="1560" height="1" fill="#1E2D45"/>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 1 — Applied, high-impact (hover/active state) -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="209" width="1560" height="64" rx="0" fill="#BC8CFF06"/>
+  <rect x="20" y="209" width="3" height="64" fill="#BC8CFF"/>
+  <!-- Status badge -->
+  <rect x="36" y="226" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95030" stroke-width="1"/>
+  <text x="65" y="239" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Applied</text>
+  <!-- Score gauge mini -->
+  <circle cx="148" cy="238" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="238" r="14" fill="none" stroke="#F85149" stroke-width="3"
+    stroke-dasharray="30 58" stroke-dashoffset="22" transform="rotate(-90 148 238)"/>
+  <text x="148" y="242" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">34</text>
+  <!-- Query preview -->
+  <text x="200" y="232" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Full table scan on orders with N+1 subquery</text>
+  <text x="200" y="248" fill="#4A5568" font-size="10" class="mono">SELECT * FROM orders o WHERE o.status = 'completed' AND ...</text>
+  <text x="200" y="262" fill="#BC8CFF" font-size="9" class="ui">✦ Replaced subquery with JOIN, added index — saved 2.3s per exec</text>
+  <!-- Connection -->
+  <circle cx="748" cy="236" r="4" fill="#4F9EFF"/>
+  <text x="758" y="236" fill="#E6EDF3" font-size="10" class="mono">prod-main-db</text>
+  <text x="758" y="250" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+  <!-- Database -->
+  <text x="900" y="240" fill="#E6EDF3" font-size="10" class="mono">ecommerce_prod</text>
+  <!-- Issues -->
+  <rect x="1040" y="226" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="238" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">2</text>
+  <rect x="1064" y="226" width="20" height="16" rx="3" fill="#F5A62318"/>
+  <text x="1074" y="238" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">2</text>
+  <rect x="1088" y="226" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1098" y="238" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <!-- Improvement -->
+  <text x="1160" y="236" fill="#3FB950" font-size="14" font-weight="700" class="mono">94%</text>
+  <text x="1160" y="252" fill="#3FB950" font-size="9" class="ui">2.4s → 0.08s</text>
+  <!-- Date -->
+  <text x="1300" y="234" fill="#E6EDF3" font-size="10" class="ui">Today</text>
+  <text x="1300" y="248" fill="#4A5568" font-size="9" class="mono">14:32</text>
+  <!-- Actions -->
+  <rect x="1470" y="224" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="239" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="224" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="239" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 2 — Applied -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="273" width="1560" height="64" fill="#070B14"/>
+  <rect x="36" y="290" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95030" stroke-width="1"/>
+  <text x="65" y="303" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Applied</text>
+  <circle cx="148" cy="302" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="302" r="14" fill="none" stroke="#F5A623" stroke-width="3"
+    stroke-dasharray="46 42" stroke-dashoffset="22" transform="rotate(-90 148 302)"/>
+  <text x="148" y="306" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">52</text>
+  <text x="200" y="296" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Missing index on users.created_at join</text>
+  <text x="200" y="312" fill="#4A5568" font-size="10" class="mono">SELECT u.id, u.username, COUNT(o.id) FROM users u LEFT JOIN ...</text>
+  <text x="200" y="326" fill="#BC8CFF" font-size="9" class="ui">✦ Added composite index, restructured GROUP BY</text>
+  <circle cx="748" cy="300" r="4" fill="#4F9EFF"/>
+  <text x="758" y="300" fill="#E6EDF3" font-size="10" class="mono">prod-main-db</text>
+  <text x="758" y="314" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+  <text x="900" y="304" fill="#E6EDF3" font-size="10" class="mono">ecommerce_prod</text>
+  <rect x="1040" y="290" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="302" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <rect x="1064" y="290" width="20" height="16" rx="3" fill="#F5A62318"/>
+  <text x="1074" y="302" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <rect x="1088" y="290" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1098" y="302" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">2</text>
+  <text x="1160" y="300" fill="#3FB950" font-size="14" font-weight="700" class="mono">82%</text>
+  <text x="1160" y="316" fill="#3FB950" font-size="9" class="ui">1.8s → 0.32s</text>
+  <text x="1300" y="298" fill="#E6EDF3" font-size="10" class="ui">Today</text>
+  <text x="1300" y="312" fill="#4A5568" font-size="9" class="mono">11:07</text>
+  <rect x="1470" y="288" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="303" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="288" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="303" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 3 — Optimized (not yet applied) -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="337" width="1560" height="64" fill="#0D1117"/>
+  <rect x="36" y="354" width="68" height="18" rx="9" fill="#4F9EFF18" stroke="#4F9EFF30" stroke-width="1"/>
+  <text x="70" y="367" fill="#4F9EFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Optimized</text>
+  <circle cx="148" cy="366" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="366" r="14" fill="none" stroke="#3FB950" stroke-width="3"
+    stroke-dasharray="62 26" stroke-dashoffset="22" transform="rotate(-90 148 366)"/>
+  <text x="148" y="370" fill="#3FB950" font-size="9" font-weight="700" text-anchor="middle" class="mono">71</text>
+  <text x="200" y="360" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Redundant subselect in product catalog query</text>
+  <text x="200" y="376" fill="#4A5568" font-size="10" class="mono">SELECT p.*, (SELECT name FROM categories WHERE id = p.cat_id) ...</text>
+  <text x="200" y="390" fill="#BC8CFF" font-size="9" class="ui">✦ Converted subselect to LEFT JOIN, suggested covering index</text>
+  <circle cx="748" cy="364" r="4" fill="#4F9EFF"/>
+  <text x="758" y="364" fill="#E6EDF3" font-size="10" class="mono">prod-main-db</text>
+  <text x="758" y="378" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+  <text x="900" y="368" fill="#E6EDF3" font-size="10" class="mono">ecommerce_prod</text>
+  <rect x="1040" y="354" width="20" height="16" rx="3" fill="#F5A62318"/>
+  <text x="1050" y="366" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <rect x="1064" y="354" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1074" y="366" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="364" fill="#3FB950" font-size="14" font-weight="700" class="mono">67%</text>
+  <text x="1160" y="380" fill="#3FB950" font-size="9" class="ui">0.45s → 0.15s</text>
+  <text x="1300" y="362" fill="#E6EDF3" font-size="10" class="ui">Yesterday</text>
+  <text x="1300" y="376" fill="#4A5568" font-size="9" class="mono">16:45</text>
+  <rect x="1470" y="352" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="367" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="352" width="46" height="22" rx="4" fill="#3FB95014" stroke="#3FB95030" stroke-width="1"/>
+  <text x="1543" y="367" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">Apply</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 4 — Indexed -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="401" width="1560" height="64" fill="#070B14"/>
+  <rect x="36" y="418" width="56" height="18" rx="9" fill="#2DD4BF18" stroke="#2DD4BF30" stroke-width="1"/>
+  <text x="64" y="431" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Indexed</text>
+  <circle cx="148" cy="430" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="430" r="14" fill="none" stroke="#F5A623" stroke-width="3"
+    stroke-dasharray="40 48" stroke-dashoffset="22" transform="rotate(-90 148 430)"/>
+  <text x="148" y="434" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">45</text>
+  <text x="200" y="424" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Slow payment lookup by transaction_id</text>
+  <text x="200" y="440" fill="#4A5568" font-size="10" class="mono">SELECT * FROM payments WHERE transaction_id = ? ORDER BY paid_at</text>
+  <text x="200" y="454" fill="#2DD4BF" font-size="9" class="ui">✦ Created idx_payments_txn_id — query now uses index range scan</text>
+  <circle cx="748" cy="428" r="4" fill="#4F9EFF"/>
+  <text x="758" y="428" fill="#E6EDF3" font-size="10" class="mono">prod-main-db</text>
+  <text x="758" y="442" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+  <text x="900" y="432" fill="#E6EDF3" font-size="10" class="mono">ecommerce_prod</text>
+  <rect x="1040" y="418" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="430" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <rect x="1064" y="418" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1074" y="430" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="428" fill="#3FB950" font-size="14" font-weight="700" class="mono">91%</text>
+  <text x="1160" y="444" fill="#3FB950" font-size="9" class="ui">3.1s → 0.28s</text>
+  <text x="1300" y="426" fill="#E6EDF3" font-size="10" class="ui">Yesterday</text>
+  <text x="1300" y="440" fill="#4A5568" font-size="9" class="mono">10:22</text>
+  <rect x="1470" y="416" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="431" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="416" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="431" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 5 — Dismissed -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="465" width="1560" height="64" fill="#0D1117"/>
+  <rect x="36" y="482" width="64" height="18" rx="9" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="68" y="495" fill="#4A5568" font-size="9" font-weight="600" text-anchor="middle" class="ui">Dismissed</text>
+  <circle cx="148" cy="494" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="494" r="14" fill="none" stroke="#3FB950" stroke-width="3"
+    stroke-dasharray="70 18" stroke-dashoffset="22" transform="rotate(-90 148 494)"/>
+  <text x="148" y="498" fill="#3FB950" font-size="9" font-weight="700" text-anchor="middle" class="mono">80</text>
+  <text x="200" y="488" fill="#8B949E" font-size="11" font-weight="600" class="ui">Minor: analytics aggregation could use materialized view</text>
+  <text x="200" y="504" fill="#4A5568" font-size="10" class="mono">SELECT DATE(created_at), COUNT(*), SUM(total_amount) FROM orders ...</text>
+  <text x="200" y="518" fill="#4A5568" font-size="9" class="ui">✦ Suggested materialized view — dismissed (acceptable perf)</text>
+  <circle cx="748" cy="492" r="4" fill="#3FB950"/>
+  <text x="758" y="492" fill="#8B949E" font-size="10" class="mono">analytics-pg</text>
+  <text x="758" y="506" fill="#4A5568" font-size="9" class="ui">PostgreSQL 16</text>
+  <text x="900" y="496" fill="#8B949E" font-size="10" class="mono">warehouse</text>
+  <rect x="1040" y="482" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1050" y="494" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="492" fill="#8B949E" font-size="14" font-weight="700" class="mono">23%</text>
+  <text x="1160" y="508" fill="#4A5568" font-size="9" class="ui">0.9s → 0.7s</text>
+  <text x="1300" y="490" fill="#E6EDF3" font-size="10" class="ui">Mar 10</text>
+  <text x="1300" y="504" fill="#4A5568" font-size="9" class="mono">09:15</text>
+  <rect x="1470" y="480" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="495" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="480" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="495" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 6 — Applied -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="529" width="1560" height="64" fill="#070B14"/>
+  <rect x="36" y="546" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95030" stroke-width="1"/>
+  <text x="65" y="559" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Applied</text>
+  <circle cx="148" cy="558" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="558" r="14" fill="none" stroke="#F85149" stroke-width="3"
+    stroke-dasharray="22 66" stroke-dashoffset="22" transform="rotate(-90 148 558)"/>
+  <text x="148" y="562" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">25</text>
+  <text x="200" y="552" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Cartesian product in multi-table report join</text>
+  <text x="200" y="568" fill="#4A5568" font-size="10" class="mono">SELECT * FROM products, categories, order_items WHERE ...</text>
+  <text x="200" y="582" fill="#BC8CFF" font-size="9" class="ui">✦ Converted implicit joins to explicit, added missing ON clauses</text>
+  <circle cx="748" cy="556" r="4" fill="#4F9EFF"/>
+  <text x="758" y="556" fill="#E6EDF3" font-size="10" class="mono">prod-main-db</text>
+  <text x="758" y="570" fill="#4A5568" font-size="9" class="ui">MySQL 8.0</text>
+  <text x="900" y="560" fill="#E6EDF3" font-size="10" class="mono">ecommerce_prod</text>
+  <rect x="1040" y="546" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="558" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">3</text>
+  <rect x="1064" y="546" width="20" height="16" rx="3" fill="#F5A62318"/>
+  <text x="1074" y="558" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="556" fill="#3FB950" font-size="14" font-weight="700" class="mono">97%</text>
+  <text x="1160" y="572" fill="#3FB950" font-size="9" class="ui">18.4s → 0.52s</text>
+  <text x="1300" y="554" fill="#E6EDF3" font-size="10" class="ui">Mar 9</text>
+  <text x="1300" y="568" fill="#4A5568" font-size="9" class="mono">15:38</text>
+  <rect x="1470" y="544" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="559" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="544" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="559" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 7 — Applied (different connection) -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="593" width="1560" height="64" fill="#0D1117"/>
+  <rect x="36" y="610" width="58" height="18" rx="9" fill="#3FB95018" stroke="#3FB95030" stroke-width="1"/>
+  <text x="65" y="623" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Applied</text>
+  <circle cx="148" cy="622" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="622" r="14" fill="none" stroke="#F5A623" stroke-width="3"
+    stroke-dasharray="48 40" stroke-dashoffset="22" transform="rotate(-90 148 622)"/>
+  <text x="148" y="626" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">55</text>
+  <text x="200" y="616" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Unoptimized user activity aggregation</text>
+  <text x="200" y="632" fill="#4A5568" font-size="10" class="mono">SELECT u.email, (SELECT MAX(login_at) FROM sessions s WHERE ...) ...</text>
+  <text x="200" y="646" fill="#BC8CFF" font-size="9" class="ui">✦ Replaced correlated subqueries with window functions</text>
+  <circle cx="748" cy="620" r="4" fill="#3FB950"/>
+  <text x="758" y="620" fill="#E6EDF3" font-size="10" class="mono">analytics-pg</text>
+  <text x="758" y="634" fill="#4A5568" font-size="9" class="ui">PostgreSQL 16</text>
+  <text x="900" y="624" fill="#E6EDF3" font-size="10" class="mono">warehouse</text>
+  <rect x="1040" y="610" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="622" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">2</text>
+  <rect x="1064" y="610" width="20" height="16" rx="3" fill="#F5A62318"/>
+  <text x="1074" y="622" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="620" fill="#3FB950" font-size="14" font-weight="700" class="mono">76%</text>
+  <text x="1160" y="636" fill="#3FB950" font-size="9" class="ui">4.2s → 1.0s</text>
+  <text x="1300" y="618" fill="#E6EDF3" font-size="10" class="ui">Mar 8</text>
+  <text x="1300" y="632" fill="#4A5568" font-size="9" class="mono">13:10</text>
+  <rect x="1470" y="608" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="623" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="608" width="46" height="22" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1543" y="623" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Rerun</text>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- ROW 8 — Optimized (MongoDB) -->
+  <!-- ═══════════════════════════════════════ -->
+  <rect x="20" y="657" width="1560" height="64" fill="#070B14"/>
+  <rect x="36" y="674" width="68" height="18" rx="9" fill="#4F9EFF18" stroke="#4F9EFF30" stroke-width="1"/>
+  <text x="70" y="687" fill="#4F9EFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Optimized</text>
+  <circle cx="148" cy="686" r="14" fill="none" stroke="#1C2333" stroke-width="3"/>
+  <circle cx="148" cy="686" r="14" fill="none" stroke="#F5A623" stroke-width="3"
+    stroke-dasharray="44 44" stroke-dashoffset="22" transform="rotate(-90 148 686)"/>
+  <text x="148" y="690" fill="#F5A623" font-size="9" font-weight="700" text-anchor="middle" class="mono">50</text>
+  <text x="200" y="680" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Unindexed collection scan on app_logs</text>
+  <text x="200" y="696" fill="#4A5568" font-size="10" class="mono">db.app_logs.find({ level: "error", timestamp: { $gte: ... } })</text>
+  <text x="200" y="710" fill="#BC8CFF" font-size="9" class="ui">✦ Suggested compound index on { level: 1, timestamp: -1 }</text>
+  <circle cx="748" cy="684" r="4" fill="#F5A623"/>
+  <text x="758" y="684" fill="#E6EDF3" font-size="10" class="mono">logs-mongo</text>
+  <text x="758" y="698" fill="#4A5568" font-size="9" class="ui">MongoDB 7.0</text>
+  <text x="900" y="688" fill="#E6EDF3" font-size="10" class="mono">app_logs</text>
+  <rect x="1040" y="674" width="20" height="16" rx="3" fill="#F8514918"/>
+  <text x="1050" y="686" fill="#F85149" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <rect x="1064" y="674" width="20" height="16" rx="3" fill="#4F9EFF18"/>
+  <text x="1074" y="686" fill="#4F9EFF" font-size="9" font-weight="700" text-anchor="middle" class="mono">1</text>
+  <text x="1160" y="684" fill="#3FB950" font-size="14" font-weight="700" class="mono">85%</text>
+  <text x="1160" y="700" fill="#3FB950" font-size="9" class="ui">6.8s → 1.0s</text>
+  <text x="1300" y="682" fill="#E6EDF3" font-size="10" class="ui">Mar 7</text>
+  <text x="1300" y="696" fill="#4A5568" font-size="9" class="mono">09:44</text>
+  <rect x="1470" y="672" width="44" height="22" rx="4" fill="#BC8CFF14" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1492" y="687" fill="#BC8CFF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Open</text>
+  <rect x="1520" y="672" width="46" height="22" rx="4" fill="#3FB95014" stroke="#3FB95030" stroke-width="1"/>
+  <text x="1543" y="687" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">Apply</text>
+
+  <!-- Faded remaining rows -->
+  <rect x="20" y="721" width="1560" height="220" fill="#0D1117" opacity="0.3"/>
+  <text x="800" y="840" fill="#4A5568" font-size="11" text-anchor="middle" class="ui">+ 39 more analyses</text>
+
+  <!-- ── PAGINATION ── -->
+  <rect x="20" y="948" width="1560" height="28" fill="#0D1117" rx="0"/>
+  <rect x="20" y="948" width="1560" height="1" fill="#1E2D45"/>
+  <text x="40" y="966" fill="#8B949E" font-size="10" class="ui">Showing 1-8 of 47 analyses</text>
+  <rect x="730" y="954" width="24" height="18" rx="4" fill="#BC8CFF"/>
+  <text x="742" y="967" fill="#070B14" font-size="10" font-weight="600" text-anchor="middle" class="ui">1</text>
+  <rect x="760" y="954" width="24" height="18" rx="4" fill="#1C2333"/>
+  <text x="772" y="967" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">2</text>
+  <rect x="790" y="954" width="24" height="18" rx="4" fill="#1C2333"/>
+  <text x="802" y="967" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">3</text>
+  <text x="826" y="967" fill="#4A5568" font-size="10" class="ui">...</text>
+  <rect x="846" y="954" width="24" height="18" rx="4" fill="#1C2333"/>
+  <text x="858" y="967" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">6</text>
+
+  <!-- ── STATUS BAR ── -->
+  <rect x="0" y="980" width="1600" height="20" fill="#111827"/>
+  <rect x="0" y="980" width="1600" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="990" r="3" fill="#BC8CFF"/>
+  <text x="24" y="994" fill="#8B949E" font-size="10" class="ui">History</text>
+  <text x="86" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="98" y="994" fill="#8B949E" font-size="10" class="ui">47 analyses</text>
+  <text x="176" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="188" y="994" fill="#3FB950" font-size="10" class="ui">31 applied</text>
+  <text x="254" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="266" y="994" fill="#2DD4BF" font-size="10" class="ui">12 indexes created</text>
+  <text x="384" y="994" fill="#4A5568" font-size="10" class="ui">|</text>
+  <text x="396" y="994" fill="#4F9EFF" font-size="10" class="ui">Avg improvement: 78%</text>
+  <text x="1540" y="994" fill="#4A5568" font-size="10" text-anchor="end" class="ui">Storage: 2.4 MB</text>
+</svg>
+
+</body>
+</html>

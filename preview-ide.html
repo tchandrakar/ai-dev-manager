@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Shinra Tensei — IDE Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #070B14; }
+    svg { display: block; width: 100%; height: auto; }
+    .screen-label {
+      background: #111827;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid #1E2D45;
+      border-bottom: 1px solid #1E2D45;
+    }
+    .screen-label .dot { width: 6px; height: 6px; border-radius: 50%; background: #F85149; }
+    .screen-label span { color: #8B949E; font-size: 11px; letter-spacing: 0.08em; font-family: 'Outfit', sans-serif; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- SCREEN 1 — MAIN EDITOR                                        -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#F85149"></div><span>SCREEN 1 — MAIN EDITOR</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui { font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; }
+    </style>
+  </defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+
+  <!-- Title bar h=32 -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/>
+  <circle cx="36" cy="16" r="6" fill="#F5A623"/>
+  <circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — src/auth/middleware.ts</text>
+
+  <!-- Menu bar h=28 -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/>
+  <rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text>
+  <text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text>
+  <text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text>
+  <text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text>
+  <text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text>
+  <text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text>
+  <text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- Toolbar h=36 -->
+  <rect y="60" width="1440" height="36" fill="#0D1117"/>
+  <rect y="95" width="1440" height="1" fill="#1E2D45"/>
+  <!-- Run button -->
+  <rect x="12" y="67" width="24" height="22" rx="4" fill="#3FB95020"/>
+  <polygon points="19,72 19,84 29,78" fill="#3FB950"/>
+  <!-- Debug button -->
+  <rect x="44" y="67" width="24" height="22" rx="4" fill="#3FB95020"/>
+  <circle cx="56" cy="78" r="6" fill="none" stroke="#3FB950" stroke-width="1.5"/>
+  <circle cx="53" cy="75" r="1.5" fill="#3FB950"/>
+  <circle cx="59" cy="75" r="1.5" fill="#3FB950"/>
+  <!-- Stop button -->
+  <rect x="76" y="67" width="24" height="22" rx="4" fill="#F8514920"/>
+  <rect x="83" y="73" width="10" height="10" rx="1" fill="#F85149"/>
+  <!-- Separator -->
+  <rect x="112" y="70" width="1" height="16" fill="#263554"/>
+  <!-- Breadcrumbs -->
+  <text x="124" y="82" fill="#8B949E" font-size="11" class="ui">src</text>
+  <text x="148" y="82" fill="#4A5568" font-size="11" class="ui">›</text>
+  <text x="160" y="82" fill="#8B949E" font-size="11" class="ui">auth</text>
+  <text x="192" y="82" fill="#4A5568" font-size="11" class="ui">›</text>
+  <text x="204" y="82" fill="#E6EDF3" font-size="11" class="ui">middleware.ts</text>
+
+  <!-- LEFT FILE TREE w=240 -->
+  <rect x="0" y="96" width="240" height="780" fill="#111827"/>
+  <rect x="240" y="96" width="1" height="780" fill="#1E2D45"/>
+  <!-- Panel header -->
+  <rect x="0" y="96" width="240" height="36" fill="#0D1117"/>
+  <rect x="0" y="96" width="3" height="36" fill="#BC8CFF"/>
+  <rect x="0" y="131" width="240" height="1" fill="#1E2D45"/>
+  <text x="16" y="118" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">EXPLORER</text>
+
+  <!-- Tree items -->
+  <!-- src/ folder -->
+  <text x="16" y="152" fill="#4A5568" font-size="10" class="mono">▼</text>
+  <rect x="28" y="142" width="8" height="8" rx="2" fill="#4F9EFF30"/>
+  <text x="42" y="152" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">src</text>
+  <!-- auth/ -->
+  <text x="30" y="172" fill="#4A5568" font-size="10" class="mono">▼</text>
+  <rect x="42" y="162" width="8" height="8" rx="2" fill="#BC8CFF30"/>
+  <text x="56" y="172" fill="#E6EDF3" font-size="11" class="ui">auth</text>
+  <!-- middleware.ts (active) -->
+  <rect x="4" y="178" width="232" height="22" rx="4" fill="#1C2333"/>
+  <rect x="4" y="178" width="2" height="22" fill="#4F9EFF"/>
+  <circle cx="60" cy="189" r="3" fill="#4F9EFF"/>
+  <text x="70" y="193" fill="#E6EDF3" font-size="11" font-weight="500" class="ui">middleware.ts</text>
+  <!-- handler.ts -->
+  <circle cx="60" cy="211" r="3" fill="#4F9EFF"/>
+  <text x="70" y="215" fill="#8B949E" font-size="11" class="ui">handler.ts</text>
+  <!-- types.ts -->
+  <circle cx="60" cy="233" r="3" fill="#4F9EFF"/>
+  <text x="70" y="237" fill="#8B949E" font-size="11" class="ui">types.ts</text>
+  <!-- index.ts -->
+  <circle cx="60" cy="255" r="3" fill="#4F9EFF"/>
+  <text x="70" y="259" fill="#8B949E" font-size="11" class="ui">index.ts</text>
+  <!-- components/ -->
+  <text x="30" y="282" fill="#4A5568" font-size="10" class="mono">▶</text>
+  <rect x="42" y="272" width="8" height="8" rx="2" fill="#3FB95030"/>
+  <text x="56" y="282" fill="#8B949E" font-size="11" class="ui">components</text>
+  <!-- utils/ -->
+  <text x="30" y="302" fill="#4A5568" font-size="10" class="mono">▶</text>
+  <rect x="42" y="292" width="8" height="8" rx="2" fill="#F5A62330"/>
+  <text x="56" y="302" fill="#8B949E" font-size="11" class="ui">utils</text>
+  <!-- App.jsx -->
+  <circle cx="46" cy="323" r="3" fill="#3FB950"/>
+  <text x="56" y="327" fill="#8B949E" font-size="11" class="ui">App.jsx</text>
+  <!-- config.json -->
+  <circle cx="46" cy="345" r="3" fill="#F5A623"/>
+  <text x="56" y="349" fill="#8B949E" font-size="11" class="ui">config.json</text>
+  <!-- package.json -->
+  <circle cx="46" cy="367" r="3" fill="#F5A623"/>
+  <text x="56" y="371" fill="#8B949E" font-size="11" class="ui">package.json</text>
+
+  <!-- TAB BAR h=32 -->
+  <rect x="241" y="96" width="1139" height="32" fill="#0D1117"/>
+  <rect x="241" y="127" width="1139" height="1" fill="#1E2D45"/>
+  <!-- Active tab -->
+  <rect x="241" y="96" width="140" height="32" fill="#070B14"/>
+  <rect x="241" y="126" width="140" height="2" fill="#4F9EFF"/>
+  <circle cx="257" cy="112" r="3" fill="#4F9EFF"/>
+  <text x="267" y="116" fill="#E6EDF3" font-size="11" class="ui">middleware.ts</text>
+  <text x="367" y="116" fill="#4A5568" font-size="10" class="ui">×</text>
+  <!-- Tab 2 -->
+  <circle cx="397" cy="112" r="3" fill="#4F9EFF"/>
+  <text x="407" y="116" fill="#8B949E" font-size="11" class="ui">handler.ts</text>
+  <text x="497" y="116" fill="#4A5568" font-size="10" class="ui">×</text>
+  <!-- Tab 3 -->
+  <circle cx="527" cy="112" r="3" fill="#4F9EFF"/>
+  <text x="537" y="116" fill="#8B949E" font-size="11" class="ui">types.ts</text>
+  <text x="617" y="116" fill="#4A5568" font-size="10" class="ui">×</text>
+
+  <!-- CODE EDITOR AREA -->
+  <rect x="241" y="128" width="1139" height="568" fill="#070B14"/>
+  <!-- Line numbers -->
+  <rect x="241" y="128" width="48" height="568" fill="#0D1117"/>
+  <text x="281" y="148" fill="#4A5568" font-size="11" text-anchor="end" class="mono">1</text>
+  <text x="281" y="166" fill="#4A5568" font-size="11" text-anchor="end" class="mono">2</text>
+  <text x="281" y="184" fill="#4A5568" font-size="11" text-anchor="end" class="mono">3</text>
+  <text x="281" y="202" fill="#4A5568" font-size="11" text-anchor="end" class="mono">4</text>
+  <text x="281" y="220" fill="#4A5568" font-size="11" text-anchor="end" class="mono">5</text>
+  <text x="281" y="238" fill="#4A5568" font-size="11" text-anchor="end" class="mono">6</text>
+  <text x="281" y="256" fill="#4A5568" font-size="11" text-anchor="end" class="mono">7</text>
+  <text x="281" y="274" fill="#4A5568" font-size="11" text-anchor="end" class="mono">8</text>
+  <text x="281" y="292" fill="#4A5568" font-size="11" text-anchor="end" class="mono">9</text>
+  <text x="281" y="310" fill="#4A5568" font-size="11" text-anchor="end" class="mono">10</text>
+  <text x="281" y="328" fill="#4A5568" font-size="11" text-anchor="end" class="mono">11</text>
+  <text x="281" y="346" fill="#4A5568" font-size="11" text-anchor="end" class="mono">12</text>
+  <text x="281" y="364" fill="#4A5568" font-size="11" text-anchor="end" class="mono">13</text>
+  <text x="281" y="382" fill="#4A5568" font-size="11" text-anchor="end" class="mono">14</text>
+  <text x="281" y="400" fill="#4A5568" font-size="11" text-anchor="end" class="mono">15</text>
+  <text x="281" y="418" fill="#4A5568" font-size="11" text-anchor="end" class="mono">16</text>
+  <text x="281" y="436" fill="#4A5568" font-size="11" text-anchor="end" class="mono">17</text>
+  <text x="281" y="454" fill="#4A5568" font-size="11" text-anchor="end" class="mono">18</text>
+  <text x="281" y="472" fill="#4A5568" font-size="11" text-anchor="end" class="mono">19</text>
+  <text x="281" y="490" fill="#4A5568" font-size="11" text-anchor="end" class="mono">20</text>
+  <text x="281" y="508" fill="#4A5568" font-size="11" text-anchor="end" class="mono">21</text>
+  <text x="281" y="526" fill="#4A5568" font-size="11" text-anchor="end" class="mono">22</text>
+  <text x="281" y="544" fill="#4A5568" font-size="11" text-anchor="end" class="mono">23</text>
+  <text x="281" y="562" fill="#4A5568" font-size="11" text-anchor="end" class="mono">24</text>
+  <text x="281" y="580" fill="#4A5568" font-size="11" text-anchor="end" class="mono">25</text>
+  <text x="281" y="598" fill="#4A5568" font-size="11" text-anchor="end" class="mono">26</text>
+  <text x="281" y="616" fill="#4A5568" font-size="11" text-anchor="end" class="mono">27</text>
+  <text x="281" y="634" fill="#4A5568" font-size="11" text-anchor="end" class="mono">28</text>
+  <text x="281" y="652" fill="#4A5568" font-size="11" text-anchor="end" class="mono">29</text>
+  <text x="281" y="670" fill="#4A5568" font-size="11" text-anchor="end" class="mono">30</text>
+
+  <!-- Code lines with syntax highlighting -->
+  <!-- Line 1: import { Request, Response, NextFunction } from 'express'; -->
+  <text x="296" y="148" class="mono" font-size="12"><tspan fill="#BC8CFF">import</tspan><tspan fill="#E6EDF3"> { </tspan><tspan fill="#79C0FF">Request</tspan><tspan fill="#E6EDF3">, </tspan><tspan fill="#79C0FF">Response</tspan><tspan fill="#E6EDF3">, </tspan><tspan fill="#79C0FF">NextFunction</tspan><tspan fill="#E6EDF3"> } </tspan><tspan fill="#BC8CFF">from</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#3FB950">'express'</tspan><tspan fill="#E6EDF3">;</tspan></text>
+  <!-- Line 2: import { verifyToken } from '../utils/jwt'; -->
+  <text x="296" y="166" class="mono" font-size="12"><tspan fill="#BC8CFF">import</tspan><tspan fill="#E6EDF3"> { </tspan><tspan fill="#4F9EFF">verifyToken</tspan><tspan fill="#E6EDF3"> } </tspan><tspan fill="#BC8CFF">from</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#3FB950">'../utils/jwt'</tspan><tspan fill="#E6EDF3">;</tspan></text>
+  <!-- Line 3: import { UserRole } from './types'; -->
+  <text x="296" y="184" class="mono" font-size="12"><tspan fill="#BC8CFF">import</tspan><tspan fill="#E6EDF3"> { </tspan><tspan fill="#79C0FF">UserRole</tspan><tspan fill="#E6EDF3"> } </tspan><tspan fill="#BC8CFF">from</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#3FB950">'./types'</tspan><tspan fill="#E6EDF3">;</tspan></text>
+  <!-- Line 4: blank -->
+  <!-- Line 5: interface AuthConfig { -->
+  <text x="296" y="220" class="mono" font-size="12"><tspan fill="#BC8CFF">interface</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#79C0FF">AuthConfig</tspan><tspan fill="#E6EDF3"> {</tspan></text>
+  <!-- Line 6 -->
+  <text x="296" y="238" class="mono" font-size="12"><tspan fill="#E6EDF3">  requiredRoles: </tspan><tspan fill="#79C0FF">UserRole</tspan><tspan fill="#E6EDF3">[];</tspan></text>
+  <!-- Line 7 -->
+  <text x="296" y="256" class="mono" font-size="12"><tspan fill="#E6EDF3">  skipPaths: </tspan><tspan fill="#79C0FF">string</tspan><tspan fill="#E6EDF3">[];</tspan></text>
+  <!-- Line 8 -->
+  <text x="296" y="274" class="mono" font-size="12"><tspan fill="#E6EDF3">}</tspan></text>
+  <!-- Line 9: blank -->
+  <!-- Line 10: export function authMiddleware -->
+  <text x="296" y="310" class="mono" font-size="12"><tspan fill="#BC8CFF">export function</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">authMiddleware</tspan><tspan fill="#E6EDF3">(config: </tspan><tspan fill="#79C0FF">AuthConfig</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <!-- Line 11 -->
+  <text x="296" y="328" class="mono" font-size="12"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">return async</tspan><tspan fill="#E6EDF3"> (req: </tspan><tspan fill="#79C0FF">Request</tspan><tspan fill="#E6EDF3">, res: </tspan><tspan fill="#79C0FF">Response</tspan><tspan fill="#E6EDF3">, next: </tspan><tspan fill="#79C0FF">NextFunction</tspan><tspan fill="#E6EDF3">) =&gt; {</tspan></text>
+  <!-- Line 12 -->
+  <text x="296" y="346" class="mono" font-size="12"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> token = req.headers.authorization?.</tspan><tspan fill="#4F9EFF">split</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">' '</tspan><tspan fill="#E6EDF3">)[</tspan><tspan fill="#F5A623">1</tspan><tspan fill="#E6EDF3">];</tspan></text>
+  <!-- Line 13: blank -->
+  <!-- Line 14: if (!token) -->
+  <text x="296" y="382" class="mono" font-size="12"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (!token) {</tspan></text>
+  <!-- Line 15 -->
+  <text x="296" y="400" class="mono" font-size="12"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> res.</tspan><tspan fill="#4F9EFF">status</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#F5A623">401</tspan><tspan fill="#E6EDF3">).</tspan><tspan fill="#4F9EFF">json</tspan><tspan fill="#E6EDF3">({ error: </tspan><tspan fill="#3FB950">'No token'</tspan><tspan fill="#E6EDF3"> });</tspan></text>
+  <!-- Line 16 -->
+  <text x="296" y="418" class="mono" font-size="12"><tspan fill="#E6EDF3">    }</tspan></text>
+  <!-- Line 17: blank -->
+  <!-- Line 18: try { -->
+  <text x="296" y="454" class="mono" font-size="12"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">try</tspan><tspan fill="#E6EDF3"> {</tspan></text>
+  <!-- Line 19 -->
+  <text x="296" y="472" class="mono" font-size="12"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> payload = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">verifyToken</tspan><tspan fill="#E6EDF3">(token);</tspan></text>
+  <!-- Line 20 -->
+  <text x="296" y="490" class="mono" font-size="12"><tspan fill="#E6EDF3">      req.user = payload;</tspan></text>
+  <!-- Line 21: blank -->
+  <!-- Line 22 -->
+  <text x="296" y="526" class="mono" font-size="12"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (config.requiredRoles.length &gt; </tspan><tspan fill="#F5A623">0</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <!-- Line 23 -->
+  <text x="296" y="544" class="mono" font-size="12"><tspan fill="#E6EDF3">        </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (!config.requiredRoles.</tspan><tspan fill="#4F9EFF">includes</tspan><tspan fill="#E6EDF3">(payload.role)) {</tspan></text>
+  <!-- Line 24 -->
+  <text x="296" y="562" class="mono" font-size="12"><tspan fill="#E6EDF3">          </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> res.</tspan><tspan fill="#4F9EFF">status</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#F5A623">403</tspan><tspan fill="#E6EDF3">).</tspan><tspan fill="#4F9EFF">json</tspan><tspan fill="#E6EDF3">({ error: </tspan><tspan fill="#3FB950">'Forbidden'</tspan><tspan fill="#E6EDF3"> });</tspan></text>
+  <!-- Line 25 -->
+  <text x="296" y="580" class="mono" font-size="12"><tspan fill="#E6EDF3">        }</tspan></text>
+  <!-- Line 26 -->
+  <text x="296" y="598" class="mono" font-size="12"><tspan fill="#E6EDF3">      }</tspan></text>
+  <!-- Line 27 -->
+  <text x="296" y="616" class="mono" font-size="12"><tspan fill="#E6EDF3">      </tspan><tspan fill="#4F9EFF">next</tspan><tspan fill="#E6EDF3">();</tspan></text>
+  <!-- Line 28: } catch -->
+  <text x="296" y="634" class="mono" font-size="12"><tspan fill="#E6EDF3">    } </tspan><tspan fill="#BC8CFF">catch</tspan><tspan fill="#E6EDF3"> (err) {</tspan></text>
+  <!-- Line 29 -->
+  <text x="296" y="652" class="mono" font-size="12"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> res.</tspan><tspan fill="#4F9EFF">status</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#F5A623">401</tspan><tspan fill="#E6EDF3">).</tspan><tspan fill="#4F9EFF">json</tspan><tspan fill="#E6EDF3">({ error: </tspan><tspan fill="#3FB950">'Invalid token'</tspan><tspan fill="#E6EDF3"> });</tspan></text>
+  <!-- Line 30 -->
+  <text x="296" y="670" class="mono" font-size="12"><tspan fill="#E6EDF3">    }</tspan></text>
+
+  <!-- Minimap -->
+  <rect x="1380" y="128" width="60" height="568" fill="#0D1117"/>
+  <rect x="1380" y="128" width="1" height="568" fill="#1E2D45"/>
+  <rect x="1390" y="138" width="40" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="144" width="35" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="150" width="30" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="162" width="28" height="2" fill="#79C0FF20"/>
+  <rect x="1390" y="168" width="20" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="174" width="18" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="186" width="42" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="192" width="35" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="198" width="40" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="204" width="30" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="210" width="24" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="222" width="20" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="228" width="38" height="2" fill="#4F9EFF20"/>
+  <rect x="1390" y="234" width="22" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="246" width="30" height="2" fill="#BC8CFF20"/>
+  <rect x="1390" y="252" width="42" height="2" fill="#E6EDF320"/>
+  <rect x="1390" y="258" width="35" height="2" fill="#E6EDF320"/>
+  <!-- Viewport indicator -->
+  <rect x="1386" y="136" width="50" height="40" rx="2" fill="none" stroke="#4F9EFF40" stroke-width="1"/>
+
+  <!-- TERMINAL PANEL h=180 -->
+  <rect x="241" y="696" width="1199" height="180" fill="#070B14"/>
+  <rect x="241" y="696" width="1199" height="1" fill="#1E2D45"/>
+  <!-- Terminal tab bar -->
+  <rect x="241" y="696" width="1199" height="28" fill="#0D1117"/>
+  <rect x="241" y="723" width="1199" height="1" fill="#1E2D45"/>
+  <rect x="241" y="696" width="3" height="28" fill="#2DD4BF"/>
+  <text x="256" y="714" fill="#E6EDF3" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">TERMINAL</text>
+  <text x="340" y="714" fill="#4A5568" font-size="10" class="ui">PROBLEMS</text>
+  <text x="420" y="714" fill="#4A5568" font-size="10" class="ui">OUTPUT</text>
+  <text x="486" y="714" fill="#4A5568" font-size="10" class="ui">DEBUG CONSOLE</text>
+  <!-- Terminal content -->
+  <text x="260" y="744" class="mono" font-size="11"><tspan fill="#3FB950">$</tspan><tspan fill="#E6EDF3"> npm run dev</tspan></text>
+  <text x="260" y="762" fill="#8B949E" font-size="11" class="mono">&gt; sharingan-app@1.0.0 dev</text>
+  <text x="260" y="780" fill="#8B949E" font-size="11" class="mono">&gt; vite</text>
+  <text x="260" y="804" class="mono" font-size="11"><tspan fill="#E6EDF3">  VITE v5.4.2  </tspan><tspan fill="#3FB950">ready in 342 ms</tspan></text>
+  <text x="260" y="826" class="mono" font-size="11"><tspan fill="#E6EDF3">  ➜  Local:   </tspan><tspan fill="#79C0FF">http://localhost:5173/</tspan></text>
+  <text x="260" y="844" class="mono" font-size="11"><tspan fill="#E6EDF3">  ➜  Network: </tspan><tspan fill="#79C0FF">http://192.168.1.42:5173/</tspan></text>
+  <text x="260" y="862" fill="#8B949E" font-size="11" class="mono">  ➜  press h + enter to show help</text>
+
+  <!-- STATUS BAR h=24 -->
+  <rect y="876" width="1440" height="24" fill="#111827"/>
+  <rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <!-- Left -->
+  <circle cx="14" cy="889" r="3" fill="#3FB950"/>
+  <text x="24" y="893" fill="#8B949E" font-size="10" class="ui">main</text>
+  <text x="70" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="82" y="893" fill="#8B949E" font-size="10" class="ui">TypeScript</text>
+  <text x="148" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="160" y="893" fill="#8B949E" font-size="10" class="ui">UTF-8</text>
+  <text x="198" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="210" y="893" fill="#8B949E" font-size="10" class="ui">LF</text>
+  <text x="234" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="246" y="893" fill="#8B949E" font-size="10" class="ui">Ln 14, Col 28</text>
+  <!-- Right -->
+  <text x="1210" y="893" fill="#8B949E" font-size="10" class="ui">Prettier</text>
+  <text x="1270" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="1280" y="893" fill="#3FB950" font-size="10" class="ui">ESLint ✓</text>
+  <text x="1340" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="1350" y="893" fill="#8B949E" font-size="10" class="ui">0 errors</text>
+  <text x="1404" y="893" fill="#F5A623" font-size="10" class="ui">2 warnings</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 2 — VISUAL DEBUGGER                                    -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#F5A623"></div><span>SCREEN 2 — VISUAL DEBUGGER</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+  <!-- Title bar -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/><circle cx="36" cy="16" r="6" fill="#F5A623"/><circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — Debug: auth-server</text>
+  <!-- Menu bar -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/><rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text><text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text><text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text><text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text><text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text><text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text><text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- Debug toolbar h=40 -->
+  <rect y="60" width="1440" height="40" fill="#0D1117"/><rect y="99" width="1440" height="1" fill="#1E2D45"/>
+  <!-- Pause btn -->
+  <rect x="12" y="68" width="28" height="24" rx="5" fill="#F5A62330" stroke="#F5A62360" stroke-width="1"/>
+  <rect x="21" y="74" width="3" height="12" rx="1" fill="#F5A623"/><rect x="27" y="74" width="3" height="12" rx="1" fill="#F5A623"/>
+  <!-- Step Over -->
+  <rect x="48" y="68" width="28" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="62" y="84" fill="#4F9EFF" font-size="14" text-anchor="middle" class="ui">→</text>
+  <!-- Step Into -->
+  <rect x="84" y="68" width="28" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="98" y="84" fill="#4F9EFF" font-size="14" text-anchor="middle" class="ui">↓</text>
+  <!-- Step Out -->
+  <rect x="120" y="68" width="28" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="134" y="84" fill="#4F9EFF" font-size="14" text-anchor="middle" class="ui">↑</text>
+  <!-- Restart -->
+  <rect x="156" y="68" width="28" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="170" y="84" fill="#3FB950" font-size="14" text-anchor="middle" class="ui">↻</text>
+  <!-- Stop -->
+  <rect x="192" y="68" width="28" height="24" rx="5" fill="#F8514920" stroke="#F8514960" stroke-width="1"/>
+  <rect x="200" y="75" width="10" height="10" rx="1" fill="#F85149"/>
+  <!-- Label right -->
+  <text x="1200" y="84" fill="#8B949E" font-size="11" class="ui">Debugging auth-server</text>
+  <text x="1380" y="84" fill="#F5A623" font-size="11" class="mono">00:04:23</text>
+
+  <!-- APM METRICS STRIP h=100 -->
+  <rect y="100" width="1440" height="110" fill="#111827"/>
+  <rect y="209" width="1440" height="1" fill="#1E2D45"/>
+  <!-- Card 1: Heap -->
+  <rect x="20" y="110" width="340" height="86" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="20" y="110" width="340" height="3" rx="2" fill="#2DD4BF"/>
+  <text x="36" y="134" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="1" class="ui">HEAP USAGE</text>
+  <text x="36" y="162" fill="#2DD4BF" font-size="24" font-weight="700" class="mono">128.4</text>
+  <text x="134" y="162" fill="#4A5568" font-size="12" class="ui">MB / 256 MB</text>
+  <text x="36" y="183" fill="#8B949E" font-size="10" class="ui">50.2%</text>
+  <!-- Sparkline -->
+  <polyline points="220,170 240,160 255,165 270,150 285,155 300,145 315,148 330,140 345,138" fill="none" stroke="#2DD4BF" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Card 2: CPU -->
+  <rect x="380" y="110" width="340" height="86" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="380" y="110" width="340" height="3" rx="2" fill="#4F9EFF"/>
+  <text x="396" y="134" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="1" class="ui">CPU USAGE</text>
+  <text x="396" y="162" fill="#4F9EFF" font-size="24" font-weight="700" class="mono">23.8%</text>
+  <text x="396" y="183" fill="#8B949E" font-size="10" class="ui">Avg: 18.2%</text>
+  <polyline points="580,168 595,160 610,172 625,155 640,165 655,150 670,158 685,145 700,152" fill="none" stroke="#4F9EFF" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Card 3: Event Loop -->
+  <rect x="740" y="110" width="340" height="86" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="740" y="110" width="340" height="3" rx="2" fill="#3FB950"/>
+  <text x="756" y="134" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="1" class="ui">EVENT LOOP LAG</text>
+  <text x="756" y="162" fill="#3FB950" font-size="24" font-weight="700" class="mono">2.4 ms</text>
+  <text x="756" y="183" fill="#8B949E" font-size="10" class="ui">P99: 8.1 ms</text>
+  <polyline points="940,172 955,168 970,170 985,165 1000,168 1015,160 1030,164 1045,158 1060,162" fill="none" stroke="#3FB950" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Card 4: Active Handles -->
+  <rect x="1100" y="110" width="320" height="86" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="1100" y="110" width="320" height="3" rx="2" fill="#BC8CFF"/>
+  <text x="1116" y="134" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="1" class="ui">ACTIVE HANDLES</text>
+  <text x="1116" y="162" fill="#BC8CFF" font-size="24" font-weight="700" class="mono">42</text>
+  <text x="1116" y="183" fill="#8B949E" font-size="10" class="ui">Sockets: 28</text>
+  <polyline points="1280,170 1295,165 1310,168 1325,160 1340,172 1355,155 1370,162 1385,158 1400,160" fill="none" stroke="#BC8CFF" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- PERFORMANCE TIMELINE h=120 -->
+  <rect x="20" y="218" width="1400" height="120" rx="8" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <text x="36" y="240" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="1" class="ui">PERFORMANCE TIMELINE</text>
+  <!-- Y axis -->
+  <text x="44" y="260" fill="#4A5568" font-size="8" class="mono">100%</text>
+  <text x="44" y="290" fill="#4A5568" font-size="8" class="mono">50%</text>
+  <text x="44" y="320" fill="#4A5568" font-size="8" class="mono">0%</text>
+  <!-- X axis -->
+  <text x="100" y="330" fill="#4A5568" font-size="8" class="mono">00:00</text>
+  <text x="400" y="330" fill="#4A5568" font-size="8" class="mono">01:00</text>
+  <text x="700" y="330" fill="#4A5568" font-size="8" class="mono">02:00</text>
+  <text x="1000" y="330" fill="#4A5568" font-size="8" class="mono">03:00</text>
+  <text x="1300" y="330" fill="#4A5568" font-size="8" class="mono">04:00</text>
+  <!-- Grid lines -->
+  <line x1="80" y1="258" x2="1400" y2="258" stroke="#1E2D4540" stroke-width="1"/>
+  <line x1="80" y1="288" x2="1400" y2="288" stroke="#1E2D4540" stroke-width="1"/>
+  <line x1="80" y1="318" x2="1400" y2="318" stroke="#1E2D4540" stroke-width="1"/>
+  <!-- Memory line (teal) -->
+  <polyline points="80,290 200,288 350,285 500,278 650,282 800,275 950,270 1100,268 1250,272 1380,265" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round"/>
+  <!-- CPU line (blue) -->
+  <polyline points="80,305 200,300 350,310 500,295 650,308 800,292 950,302 1100,288 1250,298 1380,285" fill="none" stroke="#4F9EFF" stroke-width="2" stroke-linecap="round"/>
+  <!-- Legend -->
+  <circle cx="1300" y="248" r="3" fill="#2DD4BF" cy="248"/><text x="1308" y="251" fill="#8B949E" font-size="9" class="ui">Memory</text>
+  <circle cx="1360" y="248" r="3" fill="#4F9EFF" cy="248"/><text x="1368" y="251" fill="#8B949E" font-size="9" class="ui">CPU</text>
+
+  <!-- MAIN SPLIT: Source | Variables | Call Stack -->
+  <!-- Source code panel -->
+  <rect x="0" y="346" width="560" height="530" fill="#070B14"/>
+  <rect x="560" y="346" width="1" height="530" fill="#1E2D45"/>
+  <!-- Source tab -->
+  <rect x="0" y="346" width="560" height="28" fill="#0D1117"/><rect x="0" y="373" width="560" height="1" fill="#1E2D45"/>
+  <circle cx="16" cy="360" r="3" fill="#4F9EFF"/><text x="26" y="364" fill="#E6EDF3" font-size="11" class="ui">middleware.ts</text>
+  <!-- Line numbers + code -->
+  <rect x="0" y="374" width="42" height="502" fill="#0D1117"/>
+  <text x="34" y="394" fill="#4A5568" font-size="10" text-anchor="end" class="mono">10</text>
+  <text x="34" y="412" fill="#4A5568" font-size="10" text-anchor="end" class="mono">11</text>
+  <text x="34" y="430" fill="#4A5568" font-size="10" text-anchor="end" class="mono">12</text>
+  <text x="34" y="448" fill="#4A5568" font-size="10" text-anchor="end" class="mono">13</text>
+  <!-- Breakpoint line 14 -->
+  <circle cx="10" cy="462" r="5" fill="#F85149"/>
+  <text x="34" y="466" fill="#4A5568" font-size="10" text-anchor="end" class="mono">14</text>
+  <text x="34" y="484" fill="#4A5568" font-size="10" text-anchor="end" class="mono">15</text>
+  <text x="34" y="502" fill="#4A5568" font-size="10" text-anchor="end" class="mono">16</text>
+  <text x="34" y="520" fill="#4A5568" font-size="10" text-anchor="end" class="mono">17</text>
+  <!-- Current line 18 highlight -->
+  <rect x="42" y="523" width="518" height="18" fill="#F5A62312"/>
+  <rect x="42" y="523" width="3" height="18" fill="#F5A623"/>
+  <text x="34" y="538" fill="#F5A623" font-size="10" text-anchor="end" class="mono">18</text>
+  <text x="34" y="556" fill="#4A5568" font-size="10" text-anchor="end" class="mono">19</text>
+  <text x="34" y="574" fill="#4A5568" font-size="10" text-anchor="end" class="mono">20</text>
+  <text x="34" y="592" fill="#4A5568" font-size="10" text-anchor="end" class="mono">21</text>
+  <text x="34" y="610" fill="#4A5568" font-size="10" text-anchor="end" class="mono">22</text>
+  <!-- Breakpoint line 26 -->
+  <circle cx="10" cy="680" r="5" fill="#F85149"/>
+  <text x="34" y="684" fill="#4A5568" font-size="10" text-anchor="end" class="mono">26</text>
+  <!-- Code text -->
+  <text x="50" y="394" class="mono" font-size="11"><tspan fill="#BC8CFF">export function</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">authMiddleware</tspan><tspan fill="#E6EDF3">(config) {</tspan></text>
+  <text x="50" y="412" class="mono" font-size="11"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">return async</tspan><tspan fill="#E6EDF3"> (req, res, next) =&gt; {</tspan></text>
+  <text x="50" y="430" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> token = req.headers</tspan></text>
+  <text x="50" y="448" class="mono" font-size="11"><tspan fill="#E6EDF3">      .authorization?.</tspan><tspan fill="#4F9EFF">split</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">' '</tspan><tspan fill="#E6EDF3">)[</tspan><tspan fill="#F5A623">1</tspan><tspan fill="#E6EDF3">];</tspan></text>
+  <text x="50" y="466" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (!token) {</tspan></text>
+  <text x="50" y="484" class="mono" font-size="11"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> res.</tspan><tspan fill="#4F9EFF">status</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#F5A623">401</tspan><tspan fill="#E6EDF3">)</tspan></text>
+  <text x="50" y="502" class="mono" font-size="11"><tspan fill="#E6EDF3">        .</tspan><tspan fill="#4F9EFF">json</tspan><tspan fill="#E6EDF3">({ error: </tspan><tspan fill="#3FB950">'No token'</tspan><tspan fill="#E6EDF3"> });</tspan></text>
+  <text x="50" y="520" class="mono" font-size="11"><tspan fill="#E6EDF3">    }</tspan></text>
+  <text x="50" y="538" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">try</tspan><tspan fill="#E6EDF3"> {</tspan></text>
+  <text x="50" y="556" class="mono" font-size="11"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> payload = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">verifyToken</tspan><tspan fill="#E6EDF3">(token);</tspan></text>
+  <text x="50" y="574" class="mono" font-size="11"><tspan fill="#E6EDF3">      req.user = payload;</tspan></text>
+  <text x="50" y="610" class="mono" font-size="11"><tspan fill="#E6EDF3">      </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (config.requiredRoles.length &gt; </tspan><tspan fill="#F5A623">0</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="50" y="684" class="mono" font-size="11"><tspan fill="#E6EDF3">          </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> res.</tspan><tspan fill="#4F9EFF">status</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#F5A623">403</tspan><tspan fill="#E6EDF3">).</tspan><tspan fill="#4F9EFF">json</tspan><tspan fill="#E6EDF3">({..});</tspan></text>
+
+  <!-- VARIABLES PANEL -->
+  <rect x="561" y="346" width="440" height="530" fill="#0D1117"/>
+  <rect x="1001" y="346" width="1" height="530" fill="#1E2D45"/>
+  <!-- Variables header -->
+  <rect x="561" y="346" width="440" height="28" fill="#0D1117"/>
+  <rect x="561" y="346" width="3" height="28" fill="#79C0FF"/>
+  <text x="576" y="364" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">VARIABLES</text>
+  <rect x="561" y="373" width="440" height="1" fill="#1E2D45"/>
+  <!-- Variable tree -->
+  <text x="576" y="394" class="mono" font-size="11"><tspan fill="#4A5568">▼ </tspan><tspan fill="#E6EDF3">req</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#79C0FF">Request</tspan></text>
+  <text x="596" y="412" class="mono" font-size="11"><tspan fill="#4A5568">▼ </tspan><tspan fill="#E6EDF3">headers</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#79C0FF">Object</tspan></text>
+  <text x="616" y="430" class="mono" font-size="11"><tspan fill="#8B949E">authorization</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"Bearer eyJhbG..."</tspan></text>
+  <text x="616" y="448" class="mono" font-size="11"><tspan fill="#8B949E">content-type</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"application/json"</tspan></text>
+  <text x="596" y="466" class="mono" font-size="11"><tspan fill="#8B949E">method</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"POST"</tspan></text>
+  <text x="596" y="484" class="mono" font-size="11"><tspan fill="#8B949E">url</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"/api/users"</tspan></text>
+  <text x="576" y="510" class="mono" font-size="11"><tspan fill="#E6EDF3">token</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"eyJhbGciOiJ..."</tspan></text>
+  <text x="576" y="536" class="mono" font-size="11"><tspan fill="#4A5568">▼ </tspan><tspan fill="#E6EDF3">payload</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#79C0FF">Object</tspan></text>
+  <text x="596" y="554" class="mono" font-size="11"><tspan fill="#8B949E">userId</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#F5A623">1234</tspan></text>
+  <text x="596" y="572" class="mono" font-size="11"><tspan fill="#8B949E">role</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#3FB950">"admin"</tspan></text>
+  <text x="596" y="590" class="mono" font-size="11"><tspan fill="#8B949E">exp</tspan><tspan fill="#4A5568"> : </tspan><tspan fill="#F5A623">1709251200</tspan></text>
+  <!-- Watch header -->
+  <rect x="561" y="612" width="440" height="28" fill="#0D1117"/>
+  <rect x="561" y="612" width="3" height="28" fill="#F5A623"/>
+  <text x="576" y="630" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">WATCH</text>
+  <rect x="561" y="639" width="440" height="1" fill="#1E2D45"/>
+  <text x="576" y="660" class="mono" font-size="11"><tspan fill="#E6EDF3">req.user.role</tspan><tspan fill="#4A5568"> → </tspan><tspan fill="#3FB950">"admin"</tspan></text>
+  <text x="576" y="678" class="mono" font-size="11"><tspan fill="#E6EDF3">config.requiredRoles.length</tspan><tspan fill="#4A5568"> → </tspan><tspan fill="#F5A623">2</tspan></text>
+
+  <!-- CALL STACK & BREAKPOINTS PANEL -->
+  <rect x="1002" y="346" width="438" height="530" fill="#0D1117"/>
+  <!-- Call Stack header -->
+  <rect x="1002" y="346" width="438" height="28" fill="#0D1117"/>
+  <rect x="1002" y="346" width="3" height="28" fill="#BC8CFF"/>
+  <text x="1017" y="364" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">CALL STACK</text>
+  <rect x="1002" y="373" width="438" height="1" fill="#1E2D45"/>
+  <!-- Active frame -->
+  <rect x="1008" y="378" width="426" height="22" rx="4" fill="#1C2333"/>
+  <text x="1017" y="393" class="mono" font-size="10"><tspan fill="#F5A623">→ </tspan><tspan fill="#4F9EFF">authMiddleware</tspan><tspan fill="#4A5568"> middleware.ts:18</tspan></text>
+  <text x="1017" y="415" class="mono" font-size="10"><tspan fill="#8B949E">  processRequest</tspan><tspan fill="#4A5568"> handler.ts:42</tspan></text>
+  <text x="1017" y="433" class="mono" font-size="10"><tspan fill="#8B949E">  handleRoute</tspan><tspan fill="#4A5568"> router.ts:156</tspan></text>
+  <text x="1017" y="451" class="mono" font-size="10"><tspan fill="#8B949E">  Layer.handle</tspan><tspan fill="#4A5568"> express/layer.js:95</tspan></text>
+  <text x="1017" y="469" class="mono" font-size="10"><tspan fill="#8B949E">  next</tspan><tspan fill="#4A5568"> express/route.js:144</tspan></text>
+  <!-- Breakpoints header -->
+  <rect x="1002" y="490" width="438" height="28" fill="#0D1117"/>
+  <rect x="1002" y="490" width="3" height="28" fill="#F85149"/>
+  <text x="1017" y="508" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">BREAKPOINTS</text>
+  <rect x="1002" y="517" width="438" height="1" fill="#1E2D45"/>
+  <text x="1017" y="537" class="mono" font-size="10"><tspan fill="#F85149">● </tspan><tspan fill="#8B949E">middleware.ts:14 — </tspan><tspan fill="#4A5568">const token = req.headers...</tspan></text>
+  <text x="1017" y="555" class="mono" font-size="10"><tspan fill="#F85149">● </tspan><tspan fill="#8B949E">middleware.ts:26 — </tspan><tspan fill="#4A5568">return res.status(403)...</tspan></text>
+  <text x="1017" y="573" class="mono" font-size="10"><tspan fill="#4A5568">○ handler.ts:42 — const result = await...</tspan></text>
+  <!-- Debug Console -->
+  <rect x="1002" y="594" width="438" height="28" fill="#0D1117"/>
+  <rect x="1002" y="594" width="3" height="28" fill="#3FB950"/>
+  <text x="1017" y="612" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">DEBUG CONSOLE</text>
+  <rect x="1002" y="621" width="438" height="1" fill="#1E2D45"/>
+  <text x="1017" y="644" class="mono" font-size="10"><tspan fill="#4F9EFF">&gt; </tspan><tspan fill="#E6EDF3">req.headers.authorization</tspan></text>
+  <text x="1017" y="662" class="mono" font-size="10"><tspan fill="#3FB950">"Bearer eyJhbGciOiJIUzI1NiI..."</tspan></text>
+  <text x="1017" y="684" class="mono" font-size="10"><tspan fill="#4F9EFF">&gt; </tspan><tspan fill="#E6EDF3">payload.role</tspan></text>
+  <text x="1017" y="702" class="mono" font-size="10"><tspan fill="#3FB950">"admin"</tspan></text>
+  <!-- Console input -->
+  <rect x="1008" y="720" width="426" height="24" rx="4" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1017" y="736" fill="#4F9EFF" font-size="10" class="mono">&gt; </text>
+  <rect x="1030" y="727" width="1" height="12" fill="#4F9EFF"><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/></rect>
+
+  <!-- Status bar -->
+  <rect y="876" width="1440" height="24" fill="#111827"/><rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="889" r="3" fill="#F5A623"/>
+  <text x="24" y="893" fill="#F5A623" font-size="10" class="ui">Debug Mode</text>
+  <text x="110" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="122" y="893" fill="#8B949E" font-size="10" class="ui">Paused on line 18</text>
+  <text x="260" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="272" y="893" fill="#8B949E" font-size="10" class="ui">Breakpoints: 3</text>
+  <text x="1380" y="893" fill="#F5A623" font-size="10" class="mono">00:04:23</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 3 — AI ASSISTANT                                       -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#BC8CFF"></div><span>SCREEN 3 — AI ASSISTANT</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+  <!-- Title bar -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/><circle cx="36" cy="16" r="6" fill="#F5A623"/><circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — AI Assistant</text>
+  <!-- Menu bar -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/><rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text><text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text><text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text><text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text><text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text><text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text><text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- EDITOR LEFT (60% = 860px) -->
+  <rect x="0" y="60" width="860" height="816" fill="#070B14"/>
+  <rect x="860" y="60" width="1" height="816" fill="#1E2D45"/>
+  <!-- Tab bar -->
+  <rect x="0" y="60" width="860" height="32" fill="#0D1117"/>
+  <rect x="0" y="91" width="860" height="1" fill="#1E2D45"/>
+  <rect x="0" y="60" width="140" height="32" fill="#070B14"/>
+  <rect x="0" y="90" width="140" height="2" fill="#4F9EFF"/>
+  <circle cx="16" cy="76" r="3" fill="#4F9EFF"/><text x="26" y="80" fill="#E6EDF3" font-size="11" class="ui">userService.ts</text>
+  <!-- Line numbers -->
+  <rect x="0" y="92" width="42" height="784" fill="#0D1117"/>
+  <!-- Selection highlight on lines 5-14 -->
+  <rect x="42" y="160" width="818" height="180" fill="#4F9EFF12"/>
+  <rect x="42" y="160" width="2" height="180" fill="#4F9EFF"/>
+
+  <!-- Line numbers 1-30 -->
+  <text x="34" y="114" fill="#4A5568" font-size="10" text-anchor="end" class="mono">1</text>
+  <text x="34" y="132" fill="#4A5568" font-size="10" text-anchor="end" class="mono">2</text>
+  <text x="34" y="150" fill="#4A5568" font-size="10" text-anchor="end" class="mono">3</text>
+  <text x="34" y="168" fill="#4A5568" font-size="10" text-anchor="end" class="mono">4</text>
+  <text x="34" y="186" fill="#4A5568" font-size="10" text-anchor="end" class="mono">5</text>
+  <text x="34" y="204" fill="#4A5568" font-size="10" text-anchor="end" class="mono">6</text>
+  <text x="34" y="222" fill="#4A5568" font-size="10" text-anchor="end" class="mono">7</text>
+  <text x="34" y="240" fill="#4A5568" font-size="10" text-anchor="end" class="mono">8</text>
+  <text x="34" y="258" fill="#4A5568" font-size="10" text-anchor="end" class="mono">9</text>
+  <text x="34" y="276" fill="#4A5568" font-size="10" text-anchor="end" class="mono">10</text>
+  <text x="34" y="294" fill="#4A5568" font-size="10" text-anchor="end" class="mono">11</text>
+  <text x="34" y="312" fill="#4A5568" font-size="10" text-anchor="end" class="mono">12</text>
+  <text x="34" y="330" fill="#4A5568" font-size="10" text-anchor="end" class="mono">13</text>
+  <text x="34" y="348" fill="#4A5568" font-size="10" text-anchor="end" class="mono">14</text>
+  <text x="34" y="366" fill="#4A5568" font-size="10" text-anchor="end" class="mono">15</text>
+  <text x="34" y="384" fill="#4A5568" font-size="10" text-anchor="end" class="mono">16</text>
+  <text x="34" y="402" fill="#4A5568" font-size="10" text-anchor="end" class="mono">17</text>
+  <text x="34" y="420" fill="#4A5568" font-size="10" text-anchor="end" class="mono">18</text>
+  <text x="34" y="438" fill="#4A5568" font-size="10" text-anchor="end" class="mono">19</text>
+  <text x="34" y="456" fill="#4A5568" font-size="10" text-anchor="end" class="mono">20</text>
+  <text x="34" y="474" fill="#4A5568" font-size="10" text-anchor="end" class="mono">21</text>
+  <text x="34" y="492" fill="#4A5568" font-size="10" text-anchor="end" class="mono">22</text>
+  <text x="34" y="510" fill="#4A5568" font-size="10" text-anchor="end" class="mono">23</text>
+  <text x="34" y="528" fill="#4A5568" font-size="10" text-anchor="end" class="mono">24</text>
+  <text x="34" y="546" fill="#4A5568" font-size="10" text-anchor="end" class="mono">25</text>
+  <text x="34" y="564" fill="#4A5568" font-size="10" text-anchor="end" class="mono">26</text>
+  <text x="34" y="582" fill="#4A5568" font-size="10" text-anchor="end" class="mono">27</text>
+  <text x="34" y="600" fill="#4A5568" font-size="10" text-anchor="end" class="mono">28</text>
+  <text x="34" y="618" fill="#4A5568" font-size="10" text-anchor="end" class="mono">29</text>
+  <text x="34" y="636" fill="#4A5568" font-size="10" text-anchor="end" class="mono">30</text>
+  <text x="34" y="654" fill="#4A5568" font-size="10" text-anchor="end" class="mono">31</text>
+  <text x="34" y="672" fill="#4A5568" font-size="10" text-anchor="end" class="mono">32</text>
+
+  <!-- Code -->
+  <text x="50" y="114" class="mono" font-size="11"><tspan fill="#BC8CFF">import</tspan><tspan fill="#E6EDF3"> { db } </tspan><tspan fill="#BC8CFF">from</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#3FB950">'../database'</tspan><tspan fill="#E6EDF3">;</tspan></text>
+  <text x="50" y="132" class="mono" font-size="11"><tspan fill="#BC8CFF">import</tspan><tspan fill="#E6EDF3"> { cache } </tspan><tspan fill="#BC8CFF">from</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#3FB950">'../utils/cache'</tspan><tspan fill="#E6EDF3">;</tspan></text>
+  <text x="50" y="168" class="mono" font-size="11"><tspan fill="#BC8CFF">export class</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#79C0FF">UserService</tspan><tspan fill="#E6EDF3"> {</tspan></text>
+  <text x="50" y="186" class="mono" font-size="11"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">async</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">createUser</tspan><tspan fill="#E6EDF3">(data: </tspan><tspan fill="#79C0FF">CreateUserDTO</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="50" y="204" class="mono" font-size="11"><tspan fill="#4A5568">    // TODO: Add input validation</tspan></text>
+  <text x="50" y="222" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> user = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> db.users.</tspan><tspan fill="#4F9EFF">create</tspan><tspan fill="#E6EDF3">({</tspan></text>
+  <text x="50" y="240" class="mono" font-size="11"><tspan fill="#E6EDF3">      email: data.email,</tspan></text>
+  <text x="50" y="258" class="mono" font-size="11"><tspan fill="#E6EDF3">      name: data.name,</tspan></text>
+  <text x="50" y="276" class="mono" font-size="11"><tspan fill="#E6EDF3">      password: data.password, </tspan><tspan fill="#F85149">// BUG: plain text!</tspan></text>
+  <text x="50" y="294" class="mono" font-size="11"><tspan fill="#E6EDF3">      role: </tspan><tspan fill="#3FB950">'user'</tspan><tspan fill="#E6EDF3">,</tspan></text>
+  <text x="50" y="312" class="mono" font-size="11"><tspan fill="#E6EDF3">      createdAt: </tspan><tspan fill="#BC8CFF">new</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#79C0FF">Date</tspan><tspan fill="#E6EDF3">(),</tspan></text>
+  <text x="50" y="330" class="mono" font-size="11"><tspan fill="#E6EDF3">    });</tspan></text>
+  <text x="50" y="348" class="mono" font-size="11"><tspan fill="#E6EDF3">    cache.</tspan><tspan fill="#4F9EFF">set</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">`user:${user.id}`</tspan><tspan fill="#E6EDF3">, user);</tspan></text>
+  <text x="50" y="366" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> user;</tspan></text>
+  <text x="50" y="384" class="mono" font-size="11"><tspan fill="#E6EDF3">  }</tspan></text>
+  <text x="50" y="420" class="mono" font-size="11"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">async</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">getUser</tspan><tspan fill="#E6EDF3">(id: </tspan><tspan fill="#79C0FF">string</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="50" y="438" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> cached = cache.</tspan><tspan fill="#4F9EFF">get</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">`user:${id}`</tspan><tspan fill="#E6EDF3">);</tspan></text>
+  <text x="50" y="456" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (cached) </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> cached;</tspan></text>
+  <text x="50" y="492" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> user = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> db.users.</tspan><tspan fill="#4F9EFF">findById</tspan><tspan fill="#E6EDF3">(id);</tspan></text>
+  <text x="50" y="510" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (user) cache.</tspan><tspan fill="#4F9EFF">set</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">`user:${id}`</tspan><tspan fill="#E6EDF3">, user);</tspan></text>
+  <text x="50" y="528" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">return</tspan><tspan fill="#E6EDF3"> user;</tspan></text>
+  <text x="50" y="546" class="mono" font-size="11"><tspan fill="#E6EDF3">  }</tspan></text>
+  <text x="50" y="582" class="mono" font-size="11"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">async</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">deleteUser</tspan><tspan fill="#E6EDF3">(id: </tspan><tspan fill="#79C0FF">string</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="50" y="600" class="mono" font-size="11"><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> db.users.</tspan><tspan fill="#4F9EFF">delete</tspan><tspan fill="#E6EDF3">(id);</tspan></text>
+  <text x="50" y="618" class="mono" font-size="11"><tspan fill="#F85149">    // BUG: cache not invalidated!</tspan></text>
+  <text x="50" y="636" class="mono" font-size="11"><tspan fill="#E6EDF3">  }</tspan></text>
+  <text x="50" y="654" class="mono" font-size="11"><tspan fill="#E6EDF3">}</tspan></text>
+
+  <!-- AI PANEL RIGHT (40% = 580px) -->
+  <rect x="861" y="60" width="579" height="816" fill="#0D1117"/>
+  <!-- AI Header -->
+  <rect x="861" y="60" width="579" height="44" fill="#111827"/>
+  <rect x="861" y="60" width="3" height="44" fill="#BC8CFF"/>
+  <rect x="861" y="103" width="579" height="1" fill="#1E2D45"/>
+  <text x="880" y="86" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">AI ASSISTANT</text>
+  <!-- Model pill -->
+  <rect x="1320" y="72" width="110" height="22" rx="9" fill="#BC8CFF18" stroke="#BC8CFF40" stroke-width="1"/>
+  <circle cx="1332" cy="83" r="3" fill="#BC8CFF"/>
+  <text x="1340" y="87" fill="#BC8CFF" font-size="10" font-weight="500" class="ui">Claude Sonnet 4</text>
+  <!-- Action tabs -->
+  <rect x="861" y="104" width="579" height="36" fill="#0D1117"/>
+  <rect x="861" y="139" width="579" height="1" fill="#1E2D45"/>
+  <text x="890" y="126" fill="#BC8CFF" font-size="11" font-weight="600" class="ui">Chat</text>
+  <rect x="884" y="138" width="30" height="2" fill="#BC8CFF"/>
+  <text x="940" y="126" fill="#8B949E" font-size="11" class="ui">Explain</text>
+  <text x="1000" y="126" fill="#8B949E" font-size="11" class="ui">Fix</text>
+  <text x="1040" y="126" fill="#8B949E" font-size="11" class="ui">Refactor</text>
+  <text x="1110" y="126" fill="#8B949E" font-size="11" class="ui">Test</text>
+
+  <!-- User message -->
+  <rect x="877" y="156" width="547" height="44" rx="8" fill="#1C2333"/>
+  <rect x="877" y="156" width="3" height="44" rx="2" fill="#4F9EFF"/>
+  <text x="892" y="182" fill="#E6EDF3" font-size="11" class="ui">Analyze the createUser method for security issues and bugs</text>
+
+  <!-- AI response -->
+  <rect x="877" y="216" width="547" height="480" rx="8" fill="#111827"/>
+  <rect x="877" y="216" width="3" height="480" rx="2" fill="#BC8CFF"/>
+  <text x="892" y="240" fill="#E6EDF3" font-size="12" font-weight="600" class="ui">I found 3 issues in createUser:</text>
+
+  <!-- Issue 1: Critical -->
+  <rect x="892" y="256" width="516" height="56" rx="6" fill="#0D1117" stroke="#F8514940" stroke-width="1"/>
+  <rect x="892" y="256" width="3" height="56" fill="#F85149"/>
+  <rect x="908" y="264" width="68" height="18" rx="9" fill="#F8514918" stroke="#F8514940" stroke-width="1"/>
+  <text x="942" y="277" fill="#F85149" font-size="9" font-weight="600" text-anchor="middle" class="ui">CRITICAL</text>
+  <text x="984" y="277" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Plain Text Password</text>
+  <text x="908" y="300" fill="#8B949E" font-size="10" class="ui">Password stored without hashing at line 10. Use bcrypt or argon2.</text>
+
+  <!-- Issue 2: Warning -->
+  <rect x="892" y="322" width="516" height="56" rx="6" fill="#0D1117" stroke="#F5A62340" stroke-width="1"/>
+  <rect x="892" y="322" width="3" height="56" fill="#F5A623"/>
+  <rect x="908" y="330" width="68" height="18" rx="9" fill="#F5A62318" stroke="#F5A62340" stroke-width="1"/>
+  <text x="942" y="343" fill="#F5A623" font-size="9" font-weight="600" text-anchor="middle" class="ui">WARNING</text>
+  <text x="984" y="343" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">No Input Validation</text>
+  <text x="908" y="366" fill="#8B949E" font-size="10" class="ui">No email format validation or data sanitization before insert.</text>
+
+  <!-- Issue 3: Warning -->
+  <rect x="892" y="388" width="516" height="56" rx="6" fill="#0D1117" stroke="#F5A62340" stroke-width="1"/>
+  <rect x="892" y="388" width="3" height="56" fill="#F5A623"/>
+  <rect x="908" y="396" width="68" height="18" rx="9" fill="#F5A62318" stroke="#F5A62340" stroke-width="1"/>
+  <text x="942" y="409" fill="#F5A623" font-size="9" font-weight="600" text-anchor="middle" class="ui">WARNING</text>
+  <text x="984" y="409" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">No Duplicate Check</text>
+  <text x="908" y="432" fill="#8B949E" font-size="10" class="ui">No check for existing user with same email before creation.</text>
+
+  <!-- Suggested Fix label -->
+  <text x="892" y="470" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Suggested Fix:</text>
+  <!-- Code block -->
+  <rect x="892" y="480" width="516" height="130" rx="6" fill="#070B14" stroke="#3FB95040" stroke-width="1"/>
+  <rect x="892" y="480" width="3" height="130" fill="#3FB950"/>
+  <text x="908" y="500" class="mono" font-size="10"><tspan fill="#BC8CFF">async</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">createUser</tspan><tspan fill="#E6EDF3">(data: </tspan><tspan fill="#79C0FF">CreateUserDTO</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="908" y="516" class="mono" font-size="10"><tspan fill="#E6EDF3">  </tspan><tspan fill="#4F9EFF">validateEmail</tspan><tspan fill="#E6EDF3">(data.email);</tspan></text>
+  <text x="908" y="532" class="mono" font-size="10"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> exists = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> db.users.</tspan><tspan fill="#4F9EFF">findByEmail</tspan><tspan fill="#E6EDF3">(data.email);</tspan></text>
+  <text x="908" y="548" class="mono" font-size="10"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (exists) </tspan><tspan fill="#BC8CFF">throw new</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#79C0FF">ConflictError</tspan><tspan fill="#E6EDF3">(</tspan><tspan fill="#3FB950">'Email taken'</tspan><tspan fill="#E6EDF3">);</tspan></text>
+  <text x="908" y="564" class="mono" font-size="10"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> hashed = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> bcrypt.</tspan><tspan fill="#4F9EFF">hash</tspan><tspan fill="#E6EDF3">(data.password, </tspan><tspan fill="#F5A623">12</tspan><tspan fill="#E6EDF3">);</tspan></text>
+  <text x="908" y="580" class="mono" font-size="10"><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> user = </tspan><tspan fill="#BC8CFF">await</tspan><tspan fill="#E6EDF3"> db.users.</tspan><tspan fill="#4F9EFF">create</tspan><tspan fill="#E6EDF3">({</tspan></text>
+  <text x="908" y="596" class="mono" font-size="10"><tspan fill="#E6EDF3">    ...data, password: hashed });</tspan></text>
+
+  <!-- Buttons -->
+  <rect x="892" y="620" width="80" height="26" rx="5" fill="#3FB95014" stroke="#3FB95040" stroke-width="1"/>
+  <text x="932" y="637" fill="#3FB950" font-size="10" font-weight="600" text-anchor="middle" class="ui">Apply Fix</text>
+  <rect x="982" y="620" width="60" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1012" y="637" fill="#E6EDF3" font-size="10" font-weight="600" text-anchor="middle" class="ui">Copy</text>
+
+  <!-- Suggestion chips -->
+  <rect x="877" y="660" width="547" height="36" rx="0" fill="#0D1117"/>
+  <rect x="885" y="666" width="100" height="24" rx="12" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="935" y="682" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Generate tests</text>
+  <rect x="993" y="666" width="100" height="24" rx="12" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1043" y="682" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Add validation</text>
+  <rect x="1101" y="666" width="110" height="24" rx="12" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1156" y="682" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Explain caching</text>
+  <rect x="1219" y="666" width="110" height="24" rx="12" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1274" y="682" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Optimize queries</text>
+
+  <!-- Input area -->
+  <rect x="877" y="706" width="547" height="44" rx="8" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="896" y="732" fill="#4A5568" font-size="11" class="ui">Ask about your code...</text>
+  <rect x="1388" y="716" width="28" height="24" rx="5" fill="#BC8CFF"/>
+  <text x="1402" y="732" fill="#fff" font-size="14" text-anchor="middle" class="ui">↑</text>
+
+  <!-- Status bar -->
+  <rect y="876" width="1440" height="24" fill="#111827"/><rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="889" r="3" fill="#BC8CFF"/>
+  <text x="24" y="893" fill="#BC8CFF" font-size="10" class="ui">AI: Claude Sonnet 4</text>
+  <text x="170" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="182" y="893" fill="#F85149" font-size="10" class="ui">3 issues found</text>
+  <text x="280" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="292" y="893" fill="#8B949E" font-size="10" class="ui">Tokens: 1,247</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 4 — DIAGRAM GENERATOR                                  -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#2DD4BF"></div><span>SCREEN 4 — DIAGRAM GENERATOR</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+  <!-- Title bar -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/><circle cx="36" cy="16" r="6" fill="#F5A623"/><circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — Dependency Diagram</text>
+  <!-- Menu bar -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/><rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text><text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text><text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text><text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text><text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text><text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text><text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- LEFT SIDEBAR w=280 -->
+  <rect x="0" y="60" width="280" height="816" fill="#0D1117"/>
+  <rect x="280" y="60" width="1" height="816" fill="#1E2D45"/>
+  <!-- Diagram Settings header -->
+  <rect x="0" y="60" width="280" height="36" fill="#0D1117"/>
+  <rect x="0" y="60" width="3" height="36" fill="#2DD4BF"/>
+  <text x="16" y="82" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">DIAGRAM SETTINGS</text>
+  <rect x="0" y="95" width="280" height="1" fill="#1E2D45"/>
+  <!-- Type selector -->
+  <text x="16" y="118" fill="#8B949E" font-size="10" font-weight="600" class="ui">Type</text>
+  <rect x="16" y="126" width="248" height="26" rx="5" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="140" y="143" fill="#2DD4BF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Dependency Graph</text>
+  <rect x="16" y="160" width="120" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="76" y="176" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">API Routes</text>
+  <rect x="144" y="160" width="120" height="24" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="204" y="176" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Class Diagram</text>
+  <!-- Scope -->
+  <text x="16" y="206" fill="#8B949E" font-size="10" font-weight="600" class="ui">Scope</text>
+  <circle cx="26" cy="222" r="5" fill="#2DD4BF"/><circle cx="26" cy="222" r="2" fill="#0D1117"/>
+  <text x="38" y="226" fill="#E6EDF3" font-size="11" class="ui">Full Project</text>
+  <circle cx="26" cy="244" r="5" fill="none" stroke="#263554" stroke-width="1"/>
+  <text x="38" y="248" fill="#8B949E" font-size="11" class="ui">Selected Module</text>
+  <circle cx="26" cy="266" r="5" fill="none" stroke="#263554" stroke-width="1"/>
+  <text x="38" y="270" fill="#8B949E" font-size="11" class="ui">Custom</text>
+  <!-- Depth -->
+  <text x="16" y="298" fill="#8B949E" font-size="10" font-weight="600" class="ui">Max Depth: 3</text>
+  <rect x="16" y="306" width="248" height="4" rx="2" fill="#243042"/>
+  <rect x="16" y="306" width="160" height="4" rx="2" fill="#2DD4BF"/>
+  <circle cx="176" cy="308" r="6" fill="#2DD4BF"/>
+  <!-- Toggles -->
+  <rect x="16" y="328" width="248" height="26" rx="0" fill="transparent"/>
+  <rect x="228" y="330" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="340" r="7" fill="#fff"/>
+  <text x="16" y="344" fill="#E6EDF3" font-size="11" class="ui">Show dev dependencies</text>
+  <rect x="228" y="360" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="370" r="7" fill="#fff"/>
+  <text x="16" y="374" fill="#E6EDF3" font-size="11" class="ui">Show transitive deps</text>
+  <rect x="228" y="390" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="400" r="7" fill="#fff"/>
+  <text x="16" y="404" fill="#E6EDF3" font-size="11" class="ui">Highlight circular deps</text>
+  <rect x="228" y="420" width="36" height="20" rx="10" fill="#243042"/><circle cx="241" cy="430" r="7" fill="#fff"/>
+  <text x="16" y="434" fill="#8B949E" font-size="11" class="ui">Show version numbers</text>
+
+  <!-- AI Analysis section -->
+  <rect x="0" y="460" width="280" height="36" fill="#0D1117"/>
+  <rect x="0" y="460" width="3" height="36" fill="#BC8CFF"/>
+  <text x="16" y="482" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">AI ANALYSIS</text>
+  <rect x="0" y="495" width="280" height="1" fill="#1E2D45"/>
+  <rect x="16" y="510" width="248" height="30" rx="6" fill="#BC8CFF18" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="140" y="529" fill="#BC8CFF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Analyze Dependencies</text>
+  <rect x="16" y="550" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="569" fill="#E6EDF3" font-size="11" font-weight="500" text-anchor="middle" class="ui">Find Security Issues</text>
+  <rect x="16" y="590" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="609" fill="#E6EDF3" font-size="11" font-weight="500" text-anchor="middle" class="ui">Suggest Optimizations</text>
+
+  <!-- CENTER CANVAS -->
+  <rect x="281" y="60" width="839" height="816" fill="#070B14"/>
+  <!-- Dot grid -->
+  <pattern id="dotgrid" width="24" height="24" patternUnits="userSpaceOnUse">
+    <circle cx="12" cy="12" r="0.8" fill="#1E2D4530"/>
+  </pattern>
+  <rect x="281" y="60" width="839" height="816" fill="url(#dotgrid)"/>
+
+  <!-- Central node: my-app -->
+  <rect x="640" y="420" width="120" height="40" rx="8" fill="#1C2333" stroke="#2DD4BF" stroke-width="2"/>
+  <text x="700" y="444" fill="#E6EDF3" font-size="12" font-weight="700" text-anchor="middle" class="ui">my-app</text>
+
+  <!-- Dep nodes (arranged in arc above) -->
+  <!-- express -->
+  <path d="M700,420 C700,340 440,280 440,260" fill="none" stroke="#4F9EFF60" stroke-width="2"/>
+  <rect x="380" y="240" width="100" height="32" rx="6" fill="#1C2333" stroke="#4F9EFF" stroke-width="1.5"/>
+  <circle cx="394" cy="256" r="4" fill="#4F9EFF"/><text x="410" y="260" fill="#E6EDF3" font-size="11" class="ui">express</text>
+  <!-- react -->
+  <path d="M700,420 C700,340 560,260 560,240" fill="none" stroke="#79C0FF60" stroke-width="2"/>
+  <rect x="510" y="220" width="90" height="32" rx="6" fill="#1C2333" stroke="#79C0FF" stroke-width="1.5"/>
+  <circle cx="524" cy="236" r="4" fill="#79C0FF"/><text x="540" y="240" fill="#E6EDF3" font-size="11" class="ui">react</text>
+  <!-- typescript -->
+  <path d="M700,420 C700,330 700,260 700,230" fill="none" stroke="#4F9EFF60" stroke-width="2"/>
+  <rect x="650" y="200" width="110" height="32" rx="6" fill="#1C2333" stroke="#4F9EFF" stroke-width="1.5"/>
+  <circle cx="664" cy="216" r="4" fill="#4F9EFF"/><text x="680" y="220" fill="#E6EDF3" font-size="11" class="ui">typescript</text>
+  <!-- prisma -->
+  <path d="M700,420 C700,340 840,260 840,240" fill="none" stroke="#BC8CFF60" stroke-width="2"/>
+  <rect x="800" y="220" width="90" height="32" rx="6" fill="#1C2333" stroke="#BC8CFF" stroke-width="1.5"/>
+  <circle cx="814" cy="236" r="4" fill="#BC8CFF"/><text x="830" y="240" fill="#E6EDF3" font-size="11" class="ui">prisma</text>
+  <!-- vite -->
+  <path d="M700,420 C700,340 960,280 960,260" fill="none" stroke="#F5A62360" stroke-width="2"/>
+  <rect x="920" y="240" width="80" height="32" rx="6" fill="#1C2333" stroke="#F5A623" stroke-width="1.5"/>
+  <circle cx="934" cy="256" r="4" fill="#F5A623"/><text x="950" y="260" fill="#E6EDF3" font-size="11" class="ui">vite</text>
+
+  <!-- Transitive deps (smaller, dimmer) -->
+  <path d="M430,240 C430,180 380,160 380,150" fill="none" stroke="#4F9EFF30" stroke-width="1.5"/>
+  <rect x="340" y="130" width="90" height="26" rx="5" fill="#243042" stroke="#1E2D45" stroke-width="1"/>
+  <text x="385" y="147" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">body-parser</text>
+  <path d="M555,220 C555,170 510,150 510,140" fill="none" stroke="#79C0FF30" stroke-width="1.5"/>
+  <rect x="470" y="120" width="90" height="26" rx="5" fill="#243042" stroke="#1E2D45" stroke-width="1"/>
+  <text x="515" y="137" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">react-dom</text>
+  <path d="M705,200 C705,150 690,130 690,120" fill="none" stroke="#4F9EFF30" stroke-width="1.5"/>
+  <rect x="654" y="96" width="80" height="26" rx="5" fill="#243042" stroke="#1E2D45" stroke-width="1"/>
+  <text x="694" y="113" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">ts-node</text>
+  <path d="M845,220 C845,170 870,150 870,140" fill="none" stroke="#BC8CFF30" stroke-width="1.5"/>
+  <rect x="824" y="116" width="100" height="26" rx="5" fill="#243042" stroke="#1E2D45" stroke-width="1"/>
+  <text x="874" y="133" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">@prisma/client</text>
+  <path d="M960,240 C960,180 1000,160 1000,150" fill="none" stroke="#F5A62330" stroke-width="1.5"/>
+  <rect x="966" y="126" width="76" height="26" rx="5" fill="#243042" stroke="#1E2D45" stroke-width="1"/>
+  <text x="1004" y="143" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">esbuild</text>
+
+  <!-- Circular dependency: utils <-> helpers -->
+  <rect x="500" y="530" width="80" height="32" rx="6" fill="#1C2333" stroke="#F85149" stroke-width="1.5"/>
+  <text x="540" y="550" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">utils</text>
+  <rect x="750" y="530" width="80" height="32" rx="6" fill="#1C2333" stroke="#F85149" stroke-width="1.5"/>
+  <text x="790" y="550" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">helpers</text>
+  <!-- Circular arrows (dashed red) -->
+  <path d="M580,540 C640,510 710,510 750,540" fill="none" stroke="#F85149" stroke-width="2" stroke-dasharray="6,4"/>
+  <path d="M750,555 C710,575 640,575 580,555" fill="none" stroke="#F85149" stroke-width="2" stroke-dasharray="6,4"/>
+  <!-- Warning icon -->
+  <polygon points="665,516 657,530 673,530" fill="#F5A623" stroke="#070B14" stroke-width="1"/>
+  <text x="665" y="528" fill="#070B14" font-size="8" font-weight="700" text-anchor="middle" class="mono">!</text>
+  <!-- Connection from my-app -->
+  <path d="M660,460 C640,500 560,520 540,530" fill="none" stroke="#F8514940" stroke-width="1.5"/>
+  <path d="M740,460 C760,500 780,520 790,530" fill="none" stroke="#F8514940" stroke-width="1.5"/>
+
+  <!-- Zoom controls -->
+  <rect x="1050" y="810" width="56" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1066" y="827" fill="#E6EDF3" font-size="14" class="ui">−</text>
+  <text x="1078" y="827" fill="#8B949E" font-size="10" class="ui">75%</text>
+  <text x="1098" y="827" fill="#E6EDF3" font-size="14" class="ui">+</text>
+
+  <!-- RIGHT PANEL: AI INSIGHTS w=320 -->
+  <rect x="1120" y="60" width="320" height="816" fill="#0D1117"/>
+  <rect x="1120" y="60" width="1" height="816" fill="#1E2D45"/>
+  <!-- Header -->
+  <rect x="1120" y="60" width="320" height="36" fill="#0D1117"/>
+  <rect x="1120" y="60" width="3" height="36" fill="#BC8CFF"/>
+  <text x="1136" y="82" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">AI INSIGHTS</text>
+  <rect x="1120" y="95" width="320" height="1" fill="#1E2D45"/>
+
+  <!-- Health Score Gauge -->
+  <circle cx="1280" cy="160" r="40" fill="none" stroke="#243042" stroke-width="6"/>
+  <circle cx="1280" cy="160" r="40" fill="none" stroke="#3FB950" stroke-width="6" stroke-dasharray="180 72" stroke-linecap="round" transform="rotate(-90 1280 160)"/>
+  <text x="1280" y="158" fill="#E6EDF3" font-size="22" font-weight="700" text-anchor="middle" class="mono">72</text>
+  <text x="1280" y="172" fill="#4A5568" font-size="10" text-anchor="middle" class="ui">/100</text>
+  <text x="1280" y="216" fill="#3FB950" font-size="11" font-weight="600" text-anchor="middle" class="ui">Good</text>
+
+  <!-- Issues -->
+  <rect x="1132" y="236" width="296" height="48" rx="6" fill="#111827" stroke="#F8514940" stroke-width="1"/>
+  <rect x="1132" y="236" width="3" height="48" fill="#F85149"/>
+  <text x="1148" y="254" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Circular Dependency</text>
+  <text x="1148" y="272" fill="#8B949E" font-size="10" class="ui">utils ↔ helpers creates import cycle</text>
+
+  <rect x="1132" y="294" width="296" height="48" rx="6" fill="#111827" stroke="#F5A62340" stroke-width="1"/>
+  <rect x="1132" y="294" width="3" height="48" fill="#F5A623"/>
+  <text x="1148" y="312" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Large Bundle</text>
+  <text x="1148" y="330" fill="#8B949E" font-size="10" class="ui">express adds 2.1MB to bundle</text>
+
+  <rect x="1132" y="352" width="296" height="48" rx="6" fill="#111827" stroke="#F5A62340" stroke-width="1"/>
+  <rect x="1132" y="352" width="3" height="48" fill="#F5A623"/>
+  <text x="1148" y="370" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Outdated</text>
+  <text x="1148" y="388" fill="#8B949E" font-size="10" class="ui">prisma@4.x → 5.x available</text>
+
+  <rect x="1132" y="410" width="296" height="48" rx="6" fill="#111827" stroke="#4F9EFF40" stroke-width="1"/>
+  <rect x="1132" y="410" width="3" height="48" fill="#4F9EFF"/>
+  <text x="1148" y="428" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Duplicate</text>
+  <text x="1148" y="446" fill="#8B949E" font-size="10" class="ui">body-parser bundled in express 4.16+</text>
+
+  <!-- Bundle Impact -->
+  <text x="1136" y="484" fill="#8B949E" font-size="10" font-weight="600" letter-spacing="0.5" class="ui">BUNDLE IMPACT</text>
+  <text x="1136" y="506" fill="#8B949E" font-size="10" class="ui">express</text>
+  <rect x="1210" y="496" width="180" height="12" rx="3" fill="#243042"/><rect x="1210" y="496" width="180" height="12" rx="3" fill="#2DD4BF"/>
+  <text x="1396" y="506" fill="#8B949E" font-size="9" class="mono">2.1MB</text>
+  <text x="1136" y="528" fill="#8B949E" font-size="10" class="ui">react</text>
+  <rect x="1210" y="518" width="180" height="12" rx="3" fill="#243042"/><rect x="1210" y="518" width="154" height="12" rx="3" fill="#2DD4BF80"/>
+  <text x="1370" y="528" fill="#8B949E" font-size="9" class="mono">1.8MB</text>
+  <text x="1136" y="550" fill="#8B949E" font-size="10" class="ui">prisma</text>
+  <rect x="1210" y="540" width="180" height="12" rx="3" fill="#243042"/><rect x="1210" y="540" width="103" height="12" rx="3" fill="#2DD4BF60"/>
+  <text x="1319" y="550" fill="#8B949E" font-size="9" class="mono">1.2MB</text>
+  <text x="1136" y="572" fill="#8B949E" font-size="10" class="ui">typescript</text>
+  <rect x="1210" y="562" width="180" height="12" rx="3" fill="#243042"/><rect x="1210" y="562" width="68" height="12" rx="3" fill="#2DD4BF40"/>
+  <text x="1284" y="572" fill="#8B949E" font-size="9" class="mono">0.8MB</text>
+
+  <!-- AI Actions -->
+  <rect x="1132" y="596" width="140" height="30" rx="6" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="1202" y="615" fill="#2DD4BF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Generate Report</text>
+  <rect x="1282" y="596" width="100" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1332" y="615" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Export SVG</text>
+
+  <!-- Status bar -->
+  <rect y="876" width="1440" height="24" fill="#111827"/><rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <text x="14" y="893" fill="#8B949E" font-size="10" class="ui">12 packages</text>
+  <text x="100" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="112" y="893" fill="#F85149" font-size="10" class="ui">1 circular dep</text>
+  <text x="210" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="222" y="893" fill="#3FB950" font-size="10" class="ui">Score: 72/100</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 5 — PLUGIN MANAGER                                     -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#4F9EFF"></div><span>SCREEN 5 — PLUGIN MANAGER</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+  <!-- Title bar -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/><circle cx="36" cy="16" r="6" fill="#F5A623"/><circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — Plugins</text>
+  <!-- Menu bar -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/><rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text><text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text><text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text><text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text><text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text><text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text><text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- HEADER SECTION h=80 -->
+  <rect y="60" width="1440" height="80" fill="#0D1117"/>
+  <rect y="139" width="1440" height="1" fill="#1E2D45"/>
+  <text x="24" y="90" fill="#E6EDF3" font-size="18" font-weight="700" class="ui">Plugins</text>
+  <text x="24" y="110" fill="#8B949E" font-size="12" class="ui">Extend your IDE with powerful plugins</text>
+  <!-- Search -->
+  <rect x="1100" y="72" width="320" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1120" y="91" fill="#4A5568" font-size="11" class="ui">Search plugins...</text>
+  <!-- Category tabs -->
+  <text x="200" y="130" fill="#2DD4BF" font-size="11" font-weight="600" class="ui">All</text>
+  <rect x="196" y="136" width="22" height="2" fill="#2DD4BF"/>
+  <text x="240" y="130" fill="#8B949E" font-size="11" class="ui">Languages</text>
+  <text x="320" y="130" fill="#8B949E" font-size="11" class="ui">Themes</text>
+  <text x="386" y="130" fill="#8B949E" font-size="11" class="ui">Tools</text>
+  <text x="432" y="130" fill="#8B949E" font-size="11" class="ui">Debuggers</text>
+  <text x="510" y="130" fill="#8B949E" font-size="11" class="ui">Linters</text>
+  <text x="572" y="130" fill="#8B949E" font-size="11" class="ui">Installed(4)</text>
+
+  <!-- PLUGIN GRID 2-col (w=940) -->
+  <!-- Card 1: TypeScript (installed) -->
+  <rect x="20" y="156" width="450" height="140" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="36" y="172" width="40" height="40" rx="8" fill="#4F9EFF20"/>
+  <text x="56" y="198" fill="#4F9EFF" font-size="16" font-weight="700" text-anchor="middle" class="mono">TS</text>
+  <text x="90" y="188" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">TypeScript</text>
+  <rect x="174" y="176" width="40" height="16" rx="8" fill="#4F9EFF18"/>
+  <text x="194" y="188" fill="#4F9EFF" font-size="9" text-anchor="middle" class="mono">v5.4.2</text>
+  <text x="90" y="206" fill="#8B949E" font-size="10" class="ui">by Shinra Tensei</text>
+  <text x="36" y="230" fill="#8B949E" font-size="11" class="ui">Full TypeScript &amp; JavaScript language support with IntelliSense</text>
+  <text x="36" y="252" fill="#F5A623" font-size="10" class="ui">★ 4.9</text>
+  <text x="80" y="252" fill="#8B949E" font-size="10" class="ui">2.1M downloads</text>
+  <rect x="36" y="262" width="62" height="18" rx="9" fill="#4F9EFF14" stroke="#4F9EFF30" stroke-width="1"/>
+  <text x="67" y="275" fill="#4F9EFF" font-size="9" text-anchor="middle" class="ui">Language</text>
+  <!-- Toggle ON -->
+  <rect x="400" y="176" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="423" cy="186" r="7" fill="#fff"/>
+  <text x="396" y="210" fill="#3FB950" font-size="9" font-weight="600" class="ui">Installed ✓</text>
+
+  <!-- Card 2: Python (installed) -->
+  <rect x="490" y="156" width="450" height="140" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="506" y="172" width="40" height="40" rx="8" fill="#3FB95020"/>
+  <text x="526" y="198" fill="#3FB950" font-size="16" font-weight="700" text-anchor="middle" class="mono">Py</text>
+  <text x="560" y="188" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">Python</text>
+  <rect x="620" y="176" width="40" height="16" rx="8" fill="#3FB95018"/>
+  <text x="640" y="188" fill="#3FB950" font-size="9" text-anchor="middle" class="mono">v3.8.1</text>
+  <text x="560" y="206" fill="#8B949E" font-size="10" class="ui">by Shinra Tensei</text>
+  <text x="506" y="230" fill="#8B949E" font-size="11" class="ui">Python language support with debugging, linting, and venv</text>
+  <text x="506" y="252" fill="#F5A623" font-size="10" class="ui">★ 4.8</text>
+  <text x="550" y="252" fill="#8B949E" font-size="10" class="ui">1.8M downloads</text>
+  <rect x="506" y="262" width="62" height="18" rx="9" fill="#3FB95014" stroke="#3FB95030" stroke-width="1"/>
+  <text x="537" y="275" fill="#3FB950" font-size="9" text-anchor="middle" class="ui">Language</text>
+  <rect x="870" y="176" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="893" cy="186" r="7" fill="#fff"/>
+  <text x="866" y="210" fill="#3FB950" font-size="9" font-weight="600" class="ui">Installed ✓</text>
+
+  <!-- Card 3: Rust (not installed) -->
+  <rect x="20" y="310" width="450" height="140" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="36" y="326" width="40" height="40" rx="8" fill="#F8514920"/>
+  <text x="56" y="352" fill="#F85149" font-size="16" font-weight="700" text-anchor="middle" class="mono">Rs</text>
+  <text x="90" y="342" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">Rust Analyzer</text>
+  <rect x="196" y="330" width="40" height="16" rx="8" fill="#F8514918"/>
+  <text x="216" y="342" fill="#F85149" font-size="9" text-anchor="middle" class="mono">v0.4.1</text>
+  <text x="90" y="360" fill="#8B949E" font-size="10" class="ui">by rust-lang</text>
+  <text x="36" y="384" fill="#8B949E" font-size="11" class="ui">Rust language support with real-time diagnostics and cargo integration</text>
+  <text x="36" y="406" fill="#F5A623" font-size="10" class="ui">★ 4.7</text>
+  <text x="80" y="406" fill="#8B949E" font-size="10" class="ui">890K downloads</text>
+  <rect x="36" y="416" width="62" height="18" rx="9" fill="#F8514914" stroke="#F8514930" stroke-width="1"/>
+  <text x="67" y="429" fill="#F85149" font-size="9" text-anchor="middle" class="ui">Language</text>
+  <rect x="386" y="336" width="70" height="26" rx="5" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="421" y="353" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">Install</text>
+
+  <!-- Card 4: Go (not installed) -->
+  <rect x="490" y="310" width="450" height="140" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="506" y="326" width="40" height="40" rx="8" fill="#79C0FF20"/>
+  <text x="526" y="352" fill="#79C0FF" font-size="16" font-weight="700" text-anchor="middle" class="mono">Go</text>
+  <text x="560" y="342" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">Go</text>
+  <rect x="584" y="330" width="46" height="16" rx="8" fill="#79C0FF18"/>
+  <text x="607" y="342" fill="#79C0FF" font-size="9" text-anchor="middle" class="mono">v0.41.2</text>
+  <text x="560" y="360" fill="#8B949E" font-size="10" class="ui">by golang</text>
+  <text x="506" y="384" fill="#8B949E" font-size="11" class="ui">Rich Go language support including IntelliSense, debugging, and testing</text>
+  <text x="506" y="406" fill="#F5A623" font-size="10" class="ui">★ 4.8</text>
+  <text x="550" y="406" fill="#8B949E" font-size="10" class="ui">1.2M downloads</text>
+  <rect x="506" y="416" width="62" height="18" rx="9" fill="#79C0FF14" stroke="#79C0FF30" stroke-width="1"/>
+  <text x="537" y="429" fill="#79C0FF" font-size="9" text-anchor="middle" class="ui">Language</text>
+  <rect x="856" y="336" width="70" height="26" rx="5" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="891" y="353" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">Install</text>
+
+  <!-- Card 5: Docker (installed) -->
+  <rect x="20" y="464" width="450" height="140" rx="10" fill="#0D1117" stroke="#1E2D45" stroke-width="1"/>
+  <rect x="36" y="480" width="40" height="40" rx="8" fill="#4F9EFF20"/>
+  <text x="56" y="506" fill="#4F9EFF" font-size="14" font-weight="700" text-anchor="middle" class="ui">🐳</text>
+  <text x="90" y="496" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">Docker</text>
+  <rect x="146" y="484" width="46" height="16" rx="8" fill="#4F9EFF18"/>
+  <text x="169" y="496" fill="#4F9EFF" font-size="9" text-anchor="middle" class="mono">v1.28.0</text>
+  <text x="90" y="514" fill="#8B949E" font-size="10" class="ui">by Microsoft</text>
+  <text x="36" y="538" fill="#8B949E" font-size="11" class="ui">Build, manage and deploy containerized applications</text>
+  <text x="36" y="560" fill="#F5A623" font-size="10" class="ui">★ 4.6</text>
+  <text x="80" y="560" fill="#8B949E" font-size="10" class="ui">3.2M downloads</text>
+  <rect x="36" y="570" width="48" height="18" rx="9" fill="#2DD4BF14" stroke="#2DD4BF30" stroke-width="1"/>
+  <text x="60" y="583" fill="#2DD4BF" font-size="9" text-anchor="middle" class="ui">Tools</text>
+  <rect x="400" y="484" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="423" cy="494" r="7" fill="#fff"/>
+  <text x="396" y="518" fill="#3FB950" font-size="9" font-weight="600" class="ui">Installed ✓</text>
+
+  <!-- Card 6: AI Code Lens (installed, selected) -->
+  <rect x="490" y="464" width="450" height="140" rx="10" fill="#0D1117" stroke="#BC8CFF60" stroke-width="1.5"/>
+  <rect x="506" y="480" width="40" height="40" rx="8" fill="#BC8CFF20"/>
+  <text x="526" y="506" fill="#BC8CFF" font-size="16" text-anchor="middle" class="ui">✦</text>
+  <text x="560" y="496" fill="#E6EDF3" font-size="14" font-weight="600" class="ui">AI Code Lens</text>
+  <rect x="660" y="484" width="40" height="16" rx="8" fill="#BC8CFF18"/>
+  <text x="680" y="496" fill="#BC8CFF" font-size="9" text-anchor="middle" class="mono">v2.1.0</text>
+  <text x="560" y="514" fill="#8B949E" font-size="10" class="ui">by Shinra Tensei</text>
+  <text x="506" y="538" fill="#8B949E" font-size="11" class="ui">AI-powered code suggestions, explanations, and refactoring</text>
+  <text x="506" y="560" fill="#F5A623" font-size="10" class="ui">★ 4.9</text>
+  <text x="550" y="560" fill="#8B949E" font-size="10" class="ui">1.5M downloads</text>
+  <rect x="506" y="570" width="32" height="18" rx="9" fill="#BC8CFF14" stroke="#BC8CFF30" stroke-width="1"/>
+  <text x="522" y="583" fill="#BC8CFF" font-size="9" text-anchor="middle" class="ui">AI</text>
+  <rect x="870" y="484" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="893" cy="494" r="7" fill="#fff"/>
+  <text x="866" y="518" fill="#3FB950" font-size="9" font-weight="600" class="ui">Installed ✓</text>
+
+  <!-- RIGHT DETAIL PANEL w=480 -->
+  <rect x="960" y="140" width="480" height="736" fill="#111827"/>
+  <rect x="960" y="140" width="1" height="736" fill="#1E2D45"/>
+  <!-- Plugin detail header -->
+  <rect x="960" y="140" width="480" height="80" fill="#1C2333"/>
+  <rect x="976" y="156" width="48" height="48" rx="10" fill="#BC8CFF20"/>
+  <text x="1000" y="188" fill="#BC8CFF" font-size="22" text-anchor="middle" class="ui">✦</text>
+  <text x="1040" y="172" fill="#E6EDF3" font-size="16" font-weight="700" class="ui">AI Code Lens</text>
+  <text x="1040" y="190" fill="#8B949E" font-size="11" class="ui">by Shinra Tensei · v2.1.0</text>
+  <text x="1040" y="210" fill="#F5A623" font-size="10" class="ui">★ 4.9</text>
+  <text x="1088" y="210" fill="#8B949E" font-size="10" class="ui">1.5M downloads · Updated 2 days ago</text>
+
+  <!-- Features -->
+  <text x="976" y="248" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Features</text>
+  <text x="976" y="270" fill="#3FB950" font-size="10" class="ui">✓</text><text x="992" y="270" fill="#8B949E" font-size="11" class="ui">Inline code suggestions</text>
+  <text x="976" y="290" fill="#3FB950" font-size="10" class="ui">✓</text><text x="992" y="290" fill="#8B949E" font-size="11" class="ui">Natural language code generation</text>
+  <text x="976" y="310" fill="#3FB950" font-size="10" class="ui">✓</text><text x="992" y="310" fill="#8B949E" font-size="11" class="ui">Explain code selection</text>
+  <text x="976" y="330" fill="#3FB950" font-size="10" class="ui">✓</text><text x="992" y="330" fill="#8B949E" font-size="11" class="ui">Auto-fix errors and warnings</text>
+  <text x="976" y="350" fill="#3FB950" font-size="10" class="ui">✓</text><text x="992" y="350" fill="#8B949E" font-size="11" class="ui">Generate unit tests</text>
+
+  <!-- Plugin Settings -->
+  <rect x="960" y="374" width="480" height="1" fill="#1E2D45"/>
+  <text x="976" y="400" fill="#E6EDF3" font-size="11" font-weight="600" class="ui">Plugin Settings</text>
+  <text x="976" y="428" fill="#8B949E" font-size="10" class="ui">AI Provider</text>
+  <rect x="976" y="436" width="200" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="992" y="454" fill="#E6EDF3" font-size="11" class="ui">Claude Sonnet 4</text>
+  <text x="1164" y="454" fill="#4A5568" font-size="11" class="ui">▼</text>
+
+  <text x="976" y="486" fill="#8B949E" font-size="10" class="ui">Auto-suggest</text>
+  <rect x="1140" y="474" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="1163" cy="484" r="7" fill="#fff"/>
+
+  <text x="976" y="520" fill="#8B949E" font-size="10" class="ui">Suggestion delay</text>
+  <rect x="976" y="528" width="100" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="992" y="546" fill="#E6EDF3" font-size="11" class="mono">300ms</text>
+
+  <!-- Bottom buttons -->
+  <rect x="976" y="580" width="80" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1016" y="598" fill="#E6EDF3" font-size="10" font-weight="600" text-anchor="middle" class="ui">Disable</text>
+  <rect x="1066" y="580" width="80" height="28" rx="5" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="1106" y="598" fill="#F85149" font-size="10" font-weight="600" text-anchor="middle" class="ui">Uninstall</text>
+
+  <!-- Status bar -->
+  <rect y="876" width="1440" height="24" fill="#111827"/><rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <text x="14" y="893" fill="#8B949E" font-size="10" class="ui">6 plugins</text>
+  <text x="76" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="88" y="893" fill="#3FB950" font-size="10" class="ui">4 installed</text>
+  <text x="160" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="172" y="893" fill="#F5A623" font-size="10" class="ui">2 updates available</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 6 — SEARCH EVERYWHERE                                  -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#79C0FF"></div><span>SCREEN 6 — SEARCH EVERYWHERE (⇧⇧)</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+
+  <!-- Dimmed background editor (low opacity) -->
+  <g opacity="0.25">
+    <rect y="32" width="1440" height="28" fill="#0D1117"/>
+    <rect x="0" y="60" width="240" height="840" fill="#111827"/>
+    <rect x="240" y="60" width="1" height="840" fill="#1E2D45"/>
+    <rect x="241" y="60" width="1199" height="32" fill="#0D1117"/>
+    <!-- Fake code lines -->
+    <rect x="296" y="110" width="300" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="128" width="250" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="146" width="180" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="174" width="220" height="8" rx="2" fill="#79C0FF20"/>
+    <rect x="296" y="192" width="160" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="210" width="280" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="228" width="200" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="256" width="320" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="274" width="240" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="292" width="300" height="8" rx="2" fill="#3FB95020"/>
+    <rect x="296" y="310" width="180" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="338" width="260" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="356" width="220" height="8" rx="2" fill="#E6EDF320"/>
+    <!-- File tree lines -->
+    <rect x="20" y="100" width="120" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="36" y="120" width="100" height="8" rx="2" fill="#8B949E20"/>
+    <rect x="36" y="140" width="110" height="8" rx="2" fill="#8B949E20"/>
+    <rect x="36" y="160" width="90" height="8" rx="2" fill="#8B949E20"/>
+    <rect x="36" y="180" width="80" height="8" rx="2" fill="#8B949E20"/>
+  </g>
+
+  <!-- Dark scrim overlay -->
+  <rect width="1440" height="900" fill="#070B14" opacity="0.65"/>
+
+  <!-- SEARCH DIALOG centered w=680 h=580 -->
+  <!-- Shadow layers -->
+  <rect x="374" y="158" width="692" height="592" rx="14" fill="#000000" opacity="0.4"/>
+  <rect x="378" y="155" width="684" height="585" rx="13" fill="#0D1117" stroke="#263554" stroke-width="1.5"/>
+
+  <!-- Search input h=52 -->
+  <rect x="378" y="155" width="684" height="52" rx="12" fill="#111827"/>
+  <rect x="378" y="205" width="684" height="1" fill="#1E2D45"/>
+  <!-- Magnifying glass -->
+  <circle cx="404" cy="181" r="8" fill="none" stroke="#4A5568" stroke-width="2"/>
+  <line x1="410" y1="187" x2="416" y2="193" stroke="#4A5568" stroke-width="2" stroke-linecap="round"/>
+  <!-- Search text -->
+  <text x="424" y="186" fill="#E6EDF3" font-size="14" class="ui">authMiddle</text>
+  <!-- Cursor -->
+  <rect x="516" y="172" width="2" height="18" fill="#4F9EFF"><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/></rect>
+  <!-- Shortcut badge -->
+  <rect x="1000" y="168" width="50" height="24" rx="5" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1025" y="184" fill="#8B949E" font-size="10" text-anchor="middle" class="mono">⇧⇧</text>
+
+  <!-- Filter tabs h=36 -->
+  <rect x="378" y="206" width="684" height="36" fill="#0D1117"/>
+  <rect x="378" y="241" width="684" height="1" fill="#1E2D45"/>
+  <text x="404" y="228" fill="#2DD4BF" font-size="11" font-weight="600" class="ui">All</text>
+  <text x="418" y="228" fill="#4A5568" font-size="9" class="ui">(12)</text>
+  <rect x="398" y="240" width="28" height="2" fill="#2DD4BF"/>
+  <text x="450" y="228" fill="#8B949E" font-size="11" class="ui">Classes</text>
+  <text x="498" y="228" fill="#4A5568" font-size="9" class="ui">(3)</text>
+  <text x="530" y="228" fill="#8B949E" font-size="11" class="ui">Files</text>
+  <text x="564" y="228" fill="#4A5568" font-size="9" class="ui">(4)</text>
+  <text x="594" y="228" fill="#8B949E" font-size="11" class="ui">Symbols</text>
+  <text x="646" y="228" fill="#4A5568" font-size="9" class="ui">(5)</text>
+  <text x="678" y="228" fill="#8B949E" font-size="11" class="ui">Actions</text>
+  <text x="730" y="228" fill="#4A5568" font-size="9" class="ui">(0)</text>
+  <text x="762" y="228" fill="#8B949E" font-size="11" class="ui">Git</text>
+  <text x="784" y="228" fill="#4A5568" font-size="9" class="ui">(0)</text>
+
+  <!-- Results list -->
+  <!-- Result 1 (selected) -->
+  <rect x="384" y="248" width="672" height="44" rx="4" fill="#1C2333"/>
+  <rect x="400" y="258" width="22" height="22" rx="4" fill="#BC8CFF18"/>
+  <text x="411" y="274" fill="#BC8CFF" font-size="10" text-anchor="middle" class="mono">ƒ</text>
+  <text x="432" y="270" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">authMiddle</tspan><tspan fill="#E6EDF3">ware</tspan></text>
+  <text x="432" y="284" fill="#8B949E" font-size="10" class="ui">function</text>
+  <text x="920" y="274" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/auth/middleware.ts:11</text>
+
+  <!-- Result 2 -->
+  <rect x="400" y="298" width="22" height="22" rx="4" fill="#79C0FF18"/>
+  <text x="411" y="314" fill="#79C0FF" font-size="10" text-anchor="middle" class="mono">I</text>
+  <text x="432" y="310" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">AuthMiddle</tspan><tspan fill="#E6EDF3">wareConfig</tspan></text>
+  <text x="432" y="324" fill="#8B949E" font-size="10" class="ui">interface</text>
+  <text x="920" y="314" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/auth/types.ts:5</text>
+
+  <!-- Result 3 -->
+  <rect x="400" y="338" width="22" height="22" rx="4" fill="#4F9EFF18"/>
+  <circle cx="411" cy="349" r="4" fill="#4F9EFF"/>
+  <text x="432" y="350" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">authMiddle</tspan><tspan fill="#E6EDF3">ware.test.ts</tspan></text>
+  <text x="432" y="364" fill="#8B949E" font-size="10" class="ui">file</text>
+  <text x="920" y="354" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/auth/__tests__/</text>
+
+  <!-- Result 4 -->
+  <rect x="400" y="378" width="22" height="22" rx="4" fill="#BC8CFF18"/>
+  <text x="411" y="394" fill="#BC8CFF" font-size="10" text-anchor="middle" class="mono">ƒ</text>
+  <text x="432" y="390" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">authMiddle</tspan><tspan fill="#E6EDF3">wareFactory</tspan></text>
+  <text x="432" y="404" fill="#8B949E" font-size="10" class="ui">function</text>
+  <text x="920" y="394" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/auth/factory.ts:23</text>
+
+  <!-- Result 5 -->
+  <rect x="400" y="418" width="22" height="22" rx="4" fill="#F5A62318"/>
+  <text x="411" y="434" fill="#F5A623" font-size="10" text-anchor="middle" class="mono">⚡</text>
+  <text x="432" y="430" class="ui" font-size="12"><tspan fill="#E6EDF3">use</tspan><tspan fill="#2DD4BF" font-weight="700">AuthMiddle</tspan><tspan fill="#E6EDF3">ware</tspan></text>
+  <text x="432" y="444" fill="#8B949E" font-size="10" class="ui">hook</text>
+  <text x="920" y="434" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/hooks/useAuth.ts:8</text>
+
+  <!-- Result 6 -->
+  <rect x="400" y="458" width="22" height="22" rx="4" fill="#4F9EFF18"/>
+  <circle cx="411" cy="469" r="4" fill="#4F9EFF"/>
+  <text x="432" y="470" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">middleware</tspan><tspan fill="#E6EDF3">.ts</tspan></text>
+  <text x="432" y="484" fill="#8B949E" font-size="10" class="ui">file</text>
+  <text x="920" y="474" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/auth/</text>
+
+  <!-- Result 7 -->
+  <rect x="400" y="498" width="22" height="22" rx="4" fill="#BC8CFF18"/>
+  <text x="411" y="514" fill="#BC8CFF" font-size="10" text-anchor="middle" class="mono">ƒ</text>
+  <text x="432" y="510" class="ui" font-size="12"><tspan fill="#E6EDF3">apply</tspan><tspan fill="#2DD4BF" font-weight="700">Middle</tspan><tspan fill="#E6EDF3">ware</tspan></text>
+  <text x="432" y="524" fill="#8B949E" font-size="10" class="ui">function</text>
+  <text x="920" y="514" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/utils/middleware.ts:15</text>
+
+  <!-- Result 8 -->
+  <rect x="400" y="538" width="22" height="22" rx="4" fill="#4F9EFF18"/>
+  <text x="411" y="554" fill="#4F9EFF" font-size="10" text-anchor="middle" class="mono">C</text>
+  <text x="432" y="550" class="ui" font-size="12"><tspan fill="#2DD4BF" font-weight="700">Middle</tspan><tspan fill="#E6EDF3">wareStack</tspan></text>
+  <text x="432" y="564" fill="#8B949E" font-size="10" class="ui">class</text>
+  <text x="920" y="554" fill="#4A5568" font-size="10" text-anchor="end" class="mono">src/core/middleware.ts:3</text>
+
+  <!-- Preview pane h=140 -->
+  <rect x="378" y="580" width="684" height="1" fill="#1E2D45"/>
+  <rect x="378" y="581" width="684" height="120" fill="#070B14"/>
+  <text x="394" y="598" fill="#4A5568" font-size="9" class="mono">src/auth/middleware.ts</text>
+  <text x="394" y="618" class="mono" font-size="10"><tspan fill="#4A5568"> 9  </tspan></text>
+  <!-- Line 10 highlighted -->
+  <rect x="394" y="622" width="652" height="16" fill="#4F9EFF10"/>
+  <text x="394" y="634" class="mono" font-size="10"><tspan fill="#4A5568">10  </tspan><tspan fill="#BC8CFF">export function</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">authMiddleware</tspan><tspan fill="#E6EDF3">(config: </tspan><tspan fill="#79C0FF">AuthConfig</tspan><tspan fill="#E6EDF3">) {</tspan></text>
+  <text x="394" y="650" class="mono" font-size="10"><tspan fill="#4A5568">11  </tspan><tspan fill="#E6EDF3">  </tspan><tspan fill="#BC8CFF">return async</tspan><tspan fill="#E6EDF3"> (req: </tspan><tspan fill="#79C0FF">Request</tspan><tspan fill="#E6EDF3">, res: </tspan><tspan fill="#79C0FF">Response</tspan><tspan fill="#E6EDF3">, next) =&gt; {</tspan></text>
+  <text x="394" y="666" class="mono" font-size="10"><tspan fill="#4A5568">12  </tspan><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">const</tspan><tspan fill="#E6EDF3"> token = req.headers.authorization</tspan></text>
+  <text x="394" y="682" class="mono" font-size="10"><tspan fill="#4A5568">13  </tspan></text>
+  <text x="394" y="698" class="mono" font-size="10"><tspan fill="#4A5568">14  </tspan><tspan fill="#E6EDF3">    </tspan><tspan fill="#BC8CFF">if</tspan><tspan fill="#E6EDF3"> (!token) {</tspan></text>
+
+  <!-- Footer h=32 -->
+  <rect x="378" y="701" width="684" height="36" rx="0" fill="#111827"/>
+  <rect x="378" y="735" width="684" height="3" rx="0" fill="#111827"/>
+  <rect x="378" y="700" width="684" height="1" fill="#1E2D45"/>
+  <text x="394" y="724" fill="#4A5568" font-size="10" class="ui">12 results</text>
+  <!-- Keyboard shortcuts -->
+  <text x="600" y="724" fill="#4A5568" font-size="10" class="ui">↑↓ Navigate</text>
+  <text x="700" y="724" fill="#4A5568" font-size="10" class="ui">↵ Open</text>
+  <text x="770" y="724" fill="#4A5568" font-size="10" class="ui">⌘↵ Open in split</text>
+  <!-- Scope -->
+  <rect x="990" y="712" width="56" height="20" rx="9" fill="#243042"/>
+  <text x="1018" y="726" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">Project</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 7 — RUN CONFIG & SETTINGS                              -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#3FB950"></div><span>SCREEN 7 — RUN CONFIGURATIONS &amp; SETTINGS</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style></defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+  <!-- Dimmed bg -->
+  <g opacity="0.2">
+    <rect y="32" width="1440" height="28" fill="#0D1117"/>
+    <rect x="0" y="60" width="240" height="840" fill="#111827"/>
+    <rect x="296" y="110" width="300" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="128" width="250" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="146" width="200" height="8" rx="2" fill="#E6EDF320"/>
+    <rect x="296" y="174" width="280" height="8" rx="2" fill="#BC8CFF20"/>
+    <rect x="296" y="192" width="180" height="8" rx="2" fill="#3FB95020"/>
+  </g>
+  <rect width="1440" height="900" fill="#070B14" opacity="0.65"/>
+
+  <!-- SETTINGS MODAL w=1100 h=720 -->
+  <rect x="166" y="88" width="1108" height="724" rx="12" fill="#000" opacity="0.3"/>
+  <rect x="170" y="86" width="1100" height="720" rx="12" fill="#0D1117" stroke="#263554" stroke-width="1.5"/>
+
+  <!-- Modal header h=48 -->
+  <rect x="170" y="86" width="1100" height="48" rx="12" fill="#111827"/>
+  <rect x="170" y="134" width="1100" height="0" rx="0" fill="#111827"/>
+  <text x="198" y="116" fill="#E6EDF3" font-size="14" font-weight="700" class="ui">Run / Debug Configurations</text>
+  <!-- Close button -->
+  <text x="1248" y="116" fill="#4A5568" font-size="16" class="ui">×</text>
+  <!-- Tab pills -->
+  <rect x="600" y="96" width="100" height="26" rx="13" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="650" y="113" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">Run Configs</text>
+  <rect x="710" y="96" width="90" height="26" rx="13" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="755" y="113" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Keybindings</text>
+  <rect x="810" y="96" width="60" height="26" rx="13" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="840" y="113" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Editor</text>
+  <rect x="880" y="96" width="84" height="26" rx="13" fill="transparent" stroke="#263554" stroke-width="1"/>
+  <text x="922" y="113" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Appearance</text>
+
+  <rect x="170" y="134" width="1100" height="1" fill="#1E2D45"/>
+
+  <!-- LEFT SIDEBAR w=280 -->
+  <rect x="170" y="135" width="280" height="623" fill="#111827"/>
+  <rect x="450" y="135" width="1" height="623" fill="#1E2D45"/>
+  <!-- Search -->
+  <rect x="182" y="145" width="256" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="198" y="163" fill="#4A5568" font-size="10" class="ui">Filter configurations...</text>
+
+  <!-- Node.js section -->
+  <text x="188" y="198" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">▼ NODE.JS</text>
+  <!-- Active config (selected) -->
+  <rect x="178" y="206" width="264" height="28" rx="4" fill="#1C2333"/>
+  <circle cx="200" cy="220" r="4" fill="#3FB950"/>
+  <text x="212" y="224" fill="#E6EDF3" font-size="11" font-weight="500" class="ui">▶ dev-server</text>
+  <text x="412" y="224" fill="#3FB950" font-size="9" class="ui">default</text>
+  <!-- Other configs -->
+  <text x="212" y="252" fill="#8B949E" font-size="11" class="ui">▶ test-suite</text>
+  <text x="212" y="274" fill="#8B949E" font-size="11" class="ui">▶ build-prod</text>
+
+  <!-- Python section -->
+  <text x="188" y="304" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">▼ PYTHON</text>
+  <text x="212" y="324" fill="#8B949E" font-size="11" class="ui">▶ flask-api</text>
+  <text x="212" y="346" fill="#8B949E" font-size="11" class="ui">▶ pytest</text>
+
+  <!-- Docker section -->
+  <text x="188" y="376" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">▶ DOCKER</text>
+
+  <!-- Custom section -->
+  <text x="188" y="406" fill="#4A5568" font-size="9" font-weight="600" letter-spacing="0.5" class="ui">▼ CUSTOM</text>
+  <text x="212" y="426" fill="#8B949E" font-size="11" class="ui">▶ lint-fix</text>
+
+  <!-- Bottom buttons -->
+  <rect x="182" y="710" width="140" height="28" rx="5" fill="#2DD4BF14" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="252" y="728" fill="#2DD4BF" font-size="10" font-weight="600" text-anchor="middle" class="ui">+ Add Configuration</text>
+  <rect x="330" y="710" width="46" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="353" y="728" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">Copy</text>
+  <rect x="384" y="710" width="50" height="28" rx="5" fill="#F8514914" stroke="#F8514940" stroke-width="1"/>
+  <text x="409" y="728" fill="#F85149" font-size="10" text-anchor="middle" class="ui">Delete</text>
+
+  <!-- RIGHT CONTENT w=820 -->
+  <!-- Config header -->
+  <rect x="458" y="142" width="806" height="44" fill="#0D1117"/>
+  <rect x="458" y="185" width="806" height="1" fill="#1E2D45"/>
+  <polygon points="472,156 472,174 484,165" fill="#3FB950"/>
+  <text x="494" y="168" fill="#E6EDF3" font-size="15" font-weight="700" class="ui">dev-server</text>
+  <rect x="606" y="156" width="58" height="20" rx="9" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="635" y="170" fill="#2DD4BF" font-size="9" font-weight="600" text-anchor="middle" class="ui">Node.js</text>
+  <rect x="672" y="156" width="56" height="20" rx="9" fill="#3FB95018" stroke="#3FB95040" stroke-width="1"/>
+  <text x="700" y="170" fill="#3FB950" font-size="9" font-weight="600" text-anchor="middle" class="ui">Default</text>
+
+  <!-- Section 1: General -->
+  <rect x="458" y="194" width="3" height="26" fill="#2DD4BF"/>
+  <text x="472" y="212" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">GENERAL</text>
+  <!-- Form fields -->
+  <text x="472" y="240" fill="#8B949E" font-size="10" class="ui">Name</text>
+  <rect x="472" y="248" width="300" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="486" y="265" fill="#E6EDF3" font-size="11" class="ui">dev-server</text>
+  <text x="472" y="292" fill="#8B949E" font-size="10" class="ui">Working directory</text>
+  <rect x="472" y="300" width="500" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="486" y="317" fill="#E6EDF3" font-size="11" class="mono">/Users/dev/my-app</text>
+  <text x="472" y="344" fill="#8B949E" font-size="10" class="ui">Script</text>
+  <rect x="472" y="352" width="300" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="486" y="369" fill="#E6EDF3" font-size="11" class="mono">src/index.ts</text>
+  <text x="472" y="396" fill="#8B949E" font-size="10" class="ui">Node arguments</text>
+  <rect x="472" y="404" width="500" height="26" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="486" y="421" fill="#E6EDF3" font-size="11" class="mono">--inspect --max-old-space-size=4096</text>
+
+  <!-- Section 2: Environment Variables -->
+  <rect x="458" y="444" width="3" height="26" fill="#79C0FF"/>
+  <text x="472" y="462" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">ENVIRONMENT</text>
+  <!-- Table header -->
+  <rect x="472" y="476" width="500" height="22" rx="0" fill="#1C2333"/>
+  <text x="486" y="491" fill="#4A5568" font-size="9" font-weight="600" class="ui">Variable</text>
+  <text x="660" y="491" fill="#4A5568" font-size="9" font-weight="600" class="ui">Value</text>
+  <text x="930" y="491" fill="#4A5568" font-size="9" font-weight="600" class="ui">Active</text>
+  <!-- Row 1 -->
+  <rect x="472" y="498" width="500" height="22" fill="#0D1117" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="513" fill="#E6EDF3" font-size="10" class="mono">NODE_ENV</text>
+  <text x="660" y="513" fill="#3FB950" font-size="10" class="mono">development</text>
+  <rect x="932" y="502" width="28" height="14" rx="7" fill="#3FB950"/><circle cx="950" cy="509" r="5" fill="#fff"/>
+  <!-- Row 2 -->
+  <rect x="472" y="520" width="500" height="22" fill="#070B14" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="535" fill="#E6EDF3" font-size="10" class="mono">PORT</text>
+  <text x="660" y="535" fill="#3FB950" font-size="10" class="mono">3000</text>
+  <rect x="932" y="524" width="28" height="14" rx="7" fill="#3FB950"/><circle cx="950" cy="531" r="5" fill="#fff"/>
+  <!-- Row 3 -->
+  <rect x="472" y="542" width="500" height="22" fill="#0D1117" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="557" fill="#E6EDF3" font-size="10" class="mono">DATABASE_URL</text>
+  <text x="660" y="557" fill="#3FB950" font-size="10" class="mono">postgresql://...</text>
+  <rect x="932" y="546" width="28" height="14" rx="7" fill="#3FB950"/><circle cx="950" cy="553" r="5" fill="#fff"/>
+  <rect x="472" y="572" width="90" height="22" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="517" y="587" fill="#8B949E" font-size="10" text-anchor="middle" class="ui">+ Add Variable</text>
+
+  <!-- Section 3: Before Launch -->
+  <rect x="458" y="604" width="3" height="26" fill="#BC8CFF"/>
+  <text x="472" y="622" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">BEFORE LAUNCH</text>
+  <rect x="472" y="636" width="500" height="24" rx="4" fill="#0D1117" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="652" fill="#4F9EFF" font-size="10" class="ui">1.</text>
+  <text x="502" y="652" fill="#E6EDF3" font-size="10" class="ui">Run TypeScript Compiler</text>
+  <text x="680" y="652" fill="#4A5568" font-size="10" class="mono">tsc --noEmit</text>
+  <rect x="472" y="662" width="500" height="24" rx="4" fill="#070B14" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="678" fill="#F5A623" font-size="10" class="ui">2.</text>
+  <text x="502" y="678" fill="#E6EDF3" font-size="10" class="ui">Run ESLint</text>
+  <text x="680" y="678" fill="#4A5568" font-size="10" class="mono">eslint src/</text>
+  <rect x="472" y="688" width="500" height="24" rx="4" fill="#0D1117" stroke="#1E2D4540" stroke-width="0.5"/>
+  <text x="486" y="704" fill="#3FB950" font-size="10" class="ui">3.</text>
+  <text x="502" y="704" fill="#E6EDF3" font-size="10" class="ui">Build Assets</text>
+  <text x="680" y="704" fill="#4A5568" font-size="10" class="mono">npm run build:assets</text>
+
+  <!-- Section 4: Keybindings Preview (right column) -->
+  <rect x="1000" y="194" width="3" height="26" fill="#F5A623"/>
+  <text x="1014" y="212" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">KEYBINDINGS</text>
+  <!-- Keybinding rows -->
+  <text x="1014" y="240" fill="#8B949E" font-size="10" class="ui">Run</text>
+  <rect x="1150" y="228" width="32" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1166" y="242" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌃R</text>
+  <rect x="1190" y="228" width="28" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1204" y="242" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">F5</text>
+
+  <text x="1014" y="268" fill="#8B949E" font-size="10" class="ui">Debug</text>
+  <rect x="1150" y="256" width="32" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1166" y="270" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌃D</text>
+  <rect x="1190" y="256" width="28" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1204" y="270" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">F9</text>
+
+  <text x="1014" y="296" fill="#8B949E" font-size="10" class="ui">Stop</text>
+  <rect x="1150" y="284" width="44" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1172" y="298" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌘F2</text>
+
+  <text x="1014" y="324" fill="#8B949E" font-size="10" class="ui">Step Over</text>
+  <rect x="1150" y="312" width="28" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1164" y="326" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">F8</text>
+
+  <text x="1014" y="352" fill="#8B949E" font-size="10" class="ui">Step Into</text>
+  <rect x="1150" y="340" width="28" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1164" y="354" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">F7</text>
+
+  <text x="1014" y="380" fill="#8B949E" font-size="10" class="ui">Step Out</text>
+  <rect x="1150" y="368" width="36" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1168" y="382" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⇧F8</text>
+
+  <text x="1014" y="408" fill="#8B949E" font-size="10" class="ui">Toggle Breakpoint</text>
+  <rect x="1150" y="396" width="44" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1172" y="410" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌘F8</text>
+
+  <text x="1014" y="436" fill="#8B949E" font-size="10" class="ui">Search Everywhere</text>
+  <rect x="1150" y="424" width="28" height="20" rx="4" fill="#2DD4BF18" stroke="#2DD4BF40" stroke-width="1"/>
+  <text x="1164" y="438" fill="#2DD4BF" font-size="9" text-anchor="middle" class="mono">⇧⇧</text>
+
+  <text x="1014" y="464" fill="#8B949E" font-size="10" class="ui">Find in Files</text>
+  <rect x="1150" y="452" width="56" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1178" y="466" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌘⇧F</text>
+
+  <text x="1014" y="492" fill="#8B949E" font-size="10" class="ui">Go to Definition</text>
+  <rect x="1150" y="480" width="44" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1172" y="494" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⌘B</text>
+
+  <text x="1014" y="520" fill="#8B949E" font-size="10" class="ui">Rename Symbol</text>
+  <rect x="1150" y="508" width="44" height="20" rx="4" fill="#243042" stroke="#263554" stroke-width="1"/>
+  <text x="1172" y="522" fill="#E6EDF3" font-size="9" text-anchor="middle" class="mono">⇧F6</text>
+
+  <!-- Bottom bar -->
+  <rect x="170" y="758" width="1100" height="48" rx="0" fill="#111827"/>
+  <rect x="170" y="758" width="1100" height="1" fill="#1E2D45"/>
+  <rect x="1070" y="770" width="76" height="28" rx="5" fill="#2DD4BF"/>
+  <text x="1108" y="788" fill="#070B14" font-size="11" font-weight="600" text-anchor="middle" class="ui">Apply</text>
+  <rect x="984" y="770" width="76" height="28" rx="5" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1022" y="788" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Cancel</text>
+  <text x="198" y="788" fill="#F85149" font-size="11" class="ui">Reset to Defaults</text>
+</svg>
+
+<!-- ============================================================ -->
+<!-- SCREEN 8 — API / FUNCTION CALL DIAGRAM                       -->
+<!-- ============================================================ -->
+<div class="screen-label"><div class="dot" style="background:#4F9EFF"></div><span>SCREEN 8 — API / FUNCTION CALL DIAGRAM</span></div>
+<svg viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>.ui{font-family:'Outfit',sans-serif;}.mono{font-family:'JetBrains Mono',monospace;}</style>
+    <marker id="ar-in"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#4F9EFF90"/></marker>
+    <marker id="ar-out" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#3FB95090"/></marker>
+    <marker id="ar-ext" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#F5A62390"/></marker>
+    <marker id="ar-db"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#2DD4BF90"/></marker>
+    <marker id="ar-mw"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#BC8CFF90"/></marker>
+  </defs>
+  <rect width="1440" height="900" fill="#070B14"/>
+
+  <!-- Title bar -->
+  <rect width="1440" height="32" fill="#111827"/>
+  <circle cx="16" cy="16" r="6" fill="#F85149"/><circle cx="36" cy="16" r="6" fill="#F5A623"/><circle cx="56" cy="16" r="6" fill="#3FB950"/>
+  <text x="720" y="20" fill="#8B949E" font-size="11" text-anchor="middle" class="ui">Shinra Tensei — Call Graph: UserService.createUser()</text>
+  <!-- Menu bar -->
+  <rect y="32" width="1440" height="28" fill="#0D1117"/><rect y="59" width="1440" height="1" fill="#1E2D45"/>
+  <text x="16" y="50" fill="#8B949E" font-size="11" class="ui">File</text><text x="52" y="50" fill="#8B949E" font-size="11" class="ui">Edit</text><text x="88" y="50" fill="#8B949E" font-size="11" class="ui">View</text><text x="128" y="50" fill="#8B949E" font-size="11" class="ui">Go</text><text x="156" y="50" fill="#8B949E" font-size="11" class="ui">Run</text><text x="192" y="50" fill="#8B949E" font-size="11" class="ui">Terminal</text><text x="258" y="50" fill="#8B949E" font-size="11" class="ui">Help</text>
+
+  <!-- ── LEFT SIDEBAR w=280 ── -->
+  <rect x="0" y="60" width="280" height="816" fill="#0D1117"/>
+  <rect x="280" y="60" width="1" height="816" fill="#1E2D45"/>
+  <!-- Header -->
+  <rect x="0" y="60" width="280" height="36" fill="#0D1117"/>
+  <rect x="0" y="60" width="3" height="36" fill="#4F9EFF"/>
+  <text x="16" y="82" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">CALL GRAPH EXPLORER</text>
+  <rect x="0" y="95" width="280" height="1" fill="#1E2D45"/>
+
+  <!-- Entry point search -->
+  <text x="16" y="118" fill="#8B949E" font-size="10" font-weight="600" class="ui">Entry Point</text>
+  <rect x="16" y="126" width="248" height="28" rx="5" fill="#1C2333" stroke="#4F9EFF60" stroke-width="1"/>
+  <text x="30" y="144" fill="#4A5568" font-size="10" class="ui">🔍</text>
+  <text x="46" y="144" fill="#E6EDF3" font-size="10" class="mono">UserService.createUser</text>
+
+  <!-- Recent entries -->
+  <text x="16" y="174" fill="#8B949E" font-size="10" font-weight="600" class="ui">Recent</text>
+  <rect x="16" y="182" width="248" height="22" rx="4" fill="#1C2333"/>
+  <circle cx="28" cy="193" r="3" fill="#4F9EFF"/><text x="38" y="197" fill="#8B949E" font-size="10" class="mono">POST /api/users</text>
+  <text x="16" y="218" fill="#4A5568" font-size="10" class="mono">  UserController.create</text>
+  <text x="16" y="236" fill="#4A5568" font-size="10" class="mono">  authMiddleware</text>
+  <text x="16" y="254" fill="#4A5568" font-size="10" class="mono">  validateSchema</text>
+
+  <!-- Depth control -->
+  <text x="16" y="282" fill="#8B949E" font-size="10" font-weight="600" class="ui">Call Depth</text>
+  <text x="16" y="302" fill="#E6EDF3" font-size="10" class="ui">Incoming: 3</text>
+  <rect x="16" y="310" width="248" height="4" rx="2" fill="#243042"/>
+  <rect x="16" y="310" width="160" height="4" rx="2" fill="#4F9EFF"/>
+  <circle cx="176" cy="312" r="6" fill="#4F9EFF"/>
+  <text x="16" y="336" fill="#E6EDF3" font-size="10" class="ui">Outgoing: 3</text>
+  <rect x="16" y="344" width="248" height="4" rx="2" fill="#243042"/>
+  <rect x="16" y="344" width="160" height="4" rx="2" fill="#3FB950"/>
+  <circle cx="176" cy="346" r="6" fill="#3FB950"/>
+
+  <!-- Show options -->
+  <rect x="0" y="368" width="280" height="1" fill="#1E2D45"/>
+  <text x="16" y="390" fill="#8B949E" font-size="10" font-weight="600" class="ui">Show</text>
+  <rect x="228" y="396" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="406" r="7" fill="#fff"/>
+  <text x="16" y="410" fill="#E6EDF3" font-size="11" class="ui">Incoming callers</text>
+  <rect x="228" y="420" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="430" r="7" fill="#fff"/>
+  <text x="16" y="434" fill="#E6EDF3" font-size="11" class="ui">Outgoing calls</text>
+  <rect x="228" y="444" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="454" r="7" fill="#fff"/>
+  <text x="16" y="458" fill="#E6EDF3" font-size="11" class="ui">Request / Response</text>
+  <rect x="228" y="468" width="36" height="20" rx="10" fill="#3FB950"/><circle cx="251" cy="478" r="7" fill="#fff"/>
+  <text x="16" y="482" fill="#E6EDF3" font-size="11" class="ui">File paths</text>
+  <rect x="228" y="492" width="36" height="20" rx="10" fill="#243042"/><circle cx="241" cy="502" r="7" fill="#fff"/>
+  <text x="16" y="506" fill="#8B949E" font-size="11" class="ui">Test coverage</text>
+
+  <!-- AI Analysis -->
+  <rect x="0" y="524" width="280" height="1" fill="#1E2D45"/>
+  <rect x="0" y="532" width="280" height="36" fill="#0D1117"/>
+  <rect x="0" y="532" width="3" height="36" fill="#BC8CFF"/>
+  <text x="16" y="554" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">AI ANALYSIS</text>
+  <rect x="0" y="567" width="280" height="1" fill="#1E2D45"/>
+  <rect x="16" y="580" width="248" height="30" rx="6" fill="#BC8CFF18" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="140" y="599" fill="#BC8CFF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Analyze Call Chain</text>
+  <rect x="16" y="620" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="639" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Detect Circular Calls</text>
+  <rect x="16" y="660" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="679" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Suggest Refactoring</text>
+  <rect x="16" y="700" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="719" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Generate Unit Tests</text>
+  <rect x="16" y="740" width="248" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="140" y="759" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Export as Mermaid</text>
+
+  <!-- ── CENTER CANVAS ── -->
+  <rect x="281" y="60" width="799" height="816" fill="#070B14"/>
+  <pattern id="dotg8" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="0.8" fill="#1E2D4530"/></pattern>
+  <rect x="281" y="60" width="799" height="816" fill="url(#dotg8)"/>
+
+  <!-- ════ SECTION LABELS ════ -->
+  <!-- Incoming label -->
+  <rect x="295" y="72" width="160" height="22" rx="4" fill="#4F9EFF14" stroke="#4F9EFF30" stroke-width="1"/>
+  <circle cx="310" cy="83" r="3" fill="#4F9EFF"/>
+  <text x="320" y="87" fill="#4F9EFF" font-size="9" font-weight="600" class="ui">INCOMING CALLERS  ←</text>
+  <!-- Outgoing label -->
+  <rect x="620" y="72" width="160" height="22" rx="4" fill="#3FB95014" stroke="#3FB95030" stroke-width="1"/>
+  <circle cx="635" cy="83" r="3" fill="#3FB950"/>
+  <text x="645" y="87" fill="#3FB950" font-size="9" font-weight="600" class="ui">→  OUTGOING CALLS</text>
+
+  <!-- ════ CENTRAL NODE: UserService.createUser ════ -->
+  <rect x="520" y="380" width="220" height="58" rx="10" fill="#1C2333" stroke="#4F9EFF" stroke-width="2.5"/>
+  <rect x="520" y="380" width="220" height="58" rx="10" fill="#4F9EFF06"/>
+  <!-- Top label -->
+  <rect x="560" y="372" width="140" height="16" rx="8" fill="#0D1117"/>
+  <text x="630" y="383" fill="#8B949E" font-size="9" text-anchor="middle" class="ui">FOCUS · SERVICE</text>
+  <!-- Content -->
+  <text x="630" y="404" fill="#E6EDF3" font-size="12" font-weight="700" text-anchor="middle" class="mono">UserService</text>
+  <text x="630" y="422" fill="#4F9EFF" font-size="11" font-weight="600" text-anchor="middle" class="mono">.createUser(data)</text>
+  <text x="630" y="436" fill="#4A5568" font-size="9" text-anchor="middle" class="mono">userService.ts:8</text>
+
+  <!-- ════ INCOMING CALLERS (left side) ════ -->
+  <!-- L1: UserController.create -->
+  <rect x="315" y="270" width="170" height="46" rx="8" fill="#1C2333" stroke="#4F9EFF80" stroke-width="1.5"/>
+  <text x="325" y="288" fill="#4A5568" font-size="8" class="ui">CONTROLLER</text>
+  <text x="325" y="303" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">UserController</text>
+  <text x="325" y="317" fill="#8B949E" font-size="9" class="mono">.create()  · controller.ts:24</text>
+  <!-- L2: AdminService.bulkCreate -->
+  <rect x="315" y="380" width="170" height="46" rx="8" fill="#1C2333" stroke="#4F9EFF80" stroke-width="1.5"/>
+  <text x="325" y="398" fill="#4A5568" font-size="8" class="ui">SERVICE</text>
+  <text x="325" y="413" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">AdminService</text>
+  <text x="325" y="427" fill="#8B949E" font-size="9" class="mono">.bulkCreate()  · admin.ts:67</text>
+  <!-- L3: POST /api/users (route) -->
+  <rect x="315" y="490" width="170" height="46" rx="8" fill="#1C2333" stroke="#4F9EFF80" stroke-width="1.5"/>
+  <text x="325" y="508" fill="#4A5568" font-size="8" class="ui">ROUTE HANDLER</text>
+  <text x="325" y="523" fill="#4F9EFF" font-size="11" font-weight="600" class="mono">POST /api/users</text>
+  <text x="325" y="537" fill="#8B949E" font-size="9" class="mono">routes/users.ts:12</text>
+
+  <!-- L1 parent: RegisterForm.jsx -->
+  <rect x="320" y="140" width="155" height="38" rx="6" fill="#243042" stroke="#4F9EFF40" stroke-width="1"/>
+  <text x="330" y="157" fill="#4A5568" font-size="8" class="ui">FRONTEND CALL SITE</text>
+  <text x="330" y="170" fill="#79C0FF" font-size="10" font-weight="600" class="mono">RegisterForm.jsx:67</text>
+  <!-- L1 parent: e2e.spec.ts -->
+  <rect x="480" y="140" width="140" height="38" rx="6" fill="#243042" stroke="#4F9EFF30" stroke-width="1"/>
+  <text x="490" y="157" fill="#4A5568" font-size="8" class="ui">TEST</text>
+  <text x="490" y="170" fill="#F5A623" font-size="10" font-weight="600" class="mono">e2e.spec.ts:34</text>
+
+  <!-- Lines: grandparents → L1 controller -->
+  <path d="M398,178 C398,210 400,240 400,270" fill="none" stroke="#4F9EFF50" stroke-width="1.5" marker-end="url(#ar-in)"/>
+  <path d="M550,178 C520,210 430,240 430,270" fill="none" stroke="#4F9EFF50" stroke-width="1.5" marker-end="url(#ar-in)"/>
+  <!-- Lines: L1-3 → central -->
+  <path d="M485,293 C510,310 520,360 520,380" fill="none" stroke="#4F9EFF70" stroke-width="2" marker-end="url(#ar-in)"/>
+  <path d="M485,403 C510,403 520,405 520,409" fill="none" stroke="#4F9EFF70" stroke-width="2" marker-end="url(#ar-in)"/>
+  <path d="M485,513 C510,490 520,450 520,438" fill="none" stroke="#4F9EFF70" stroke-width="2" marker-end="url(#ar-in)"/>
+
+  <!-- ════ OUTGOING CALLS (right side) ════ -->
+  <!-- R1: validateEmail (utility) -->
+  <rect x="775" y="200" width="160" height="46" rx="8" fill="#1C2333" stroke="#3FB95080" stroke-width="1.5"/>
+  <text x="785" y="218" fill="#4A5568" font-size="8" class="ui">UTILITY</text>
+  <text x="785" y="233" fill="#3FB950" font-size="11" font-weight="600" class="mono">validateEmail()</text>
+  <text x="785" y="247" fill="#8B949E" font-size="9" class="mono">utils/email.ts:5</text>
+
+  <!-- R2: db.users.findByEmail (DB) -->
+  <rect x="775" y="310" width="160" height="46" rx="8" fill="#1C2333" stroke="#2DD4BF80" stroke-width="1.5"/>
+  <text x="785" y="328" fill="#4A5568" font-size="8" class="ui">DATABASE</text>
+  <text x="785" y="343" fill="#2DD4BF" font-size="11" font-weight="600" class="mono">db.users.findByEmail</text>
+  <text x="785" y="357" fill="#8B949E" font-size="9" class="mono">repository.ts:42</text>
+
+  <!-- R3: bcrypt.hash (external lib) -->
+  <rect x="775" y="400" width="160" height="46" rx="8" fill="#1C2333" stroke="#F5A62380" stroke-width="1.5"/>
+  <text x="785" y="418" fill="#4A5568" font-size="8" class="ui">LIBRARY</text>
+  <text x="785" y="433" fill="#F5A623" font-size="11" font-weight="600" class="mono">bcrypt.hash()</text>
+  <text x="785" y="447" fill="#8B949E" font-size="9" class="mono">node_modules/bcrypt</text>
+
+  <!-- R4: db.users.create (DB) -->
+  <rect x="775" y="490" width="160" height="46" rx="8" fill="#1C2333" stroke="#2DD4BF80" stroke-width="1.5"/>
+  <text x="785" y="508" fill="#4A5568" font-size="8" class="ui">DATABASE</text>
+  <text x="785" y="523" fill="#2DD4BF" font-size="11" font-weight="600" class="mono">db.users.create()</text>
+  <text x="785" y="537" fill="#8B949E" font-size="9" class="mono">repository.ts:15</text>
+
+  <!-- R5: cache.set (cache) -->
+  <rect x="775" y="580" width="160" height="46" rx="8" fill="#1C2333" stroke="#3FB95080" stroke-width="1.5"/>
+  <text x="785" y="598" fill="#4A5568" font-size="8" class="ui">CACHE</text>
+  <text x="785" y="613" fill="#3FB950" font-size="11" font-weight="600" class="mono">cache.set()</text>
+  <text x="785" y="627" fill="#8B949E" font-size="9" class="mono">utils/cache.ts:31</text>
+
+  <!-- R6: emailService.send (external) -->
+  <rect x="775" y="670" width="160" height="46" rx="8" fill="#1C2333" stroke="#F5A62380" stroke-width="1.5"/>
+  <text x="785" y="688" fill="#4A5568" font-size="8" class="ui">EXTERNAL SERVICE</text>
+  <text x="785" y="703" fill="#F5A623" font-size="11" font-weight="600" class="mono">emailService.send()</text>
+  <text x="785" y="717" fill="#8B949E" font-size="9" class="mono">services/email.ts:22</text>
+
+  <!-- Lines: central → R1-R6 -->
+  <path d="M740,395 C758,360 770,260 775,240" fill="none" stroke="#3FB95070" stroke-width="1.5" marker-end="url(#ar-out)"/>
+  <path d="M740,398 C758,370 770,340 775,333" fill="none" stroke="#2DD4BF70" stroke-width="1.5" marker-end="url(#ar-db)"/>
+  <path d="M740,409 C758,409 770,420 775,423" fill="none" stroke="#F5A62370" stroke-width="1.5" marker-end="url(#ar-ext)"/>
+  <path d="M740,420 C758,450 770,490 775,513" fill="none" stroke="#2DD4BF70" stroke-width="1.5" marker-end="url(#ar-db)"/>
+  <path d="M740,428 C758,490 770,580 775,603" fill="none" stroke="#3FB95070" stroke-width="1.5" marker-end="url(#ar-out)"/>
+  <path d="M740,435 C758,520 770,660 775,693" fill="none" stroke="#F5A62370" stroke-width="1.5" marker-end="url(#ar-ext)"/>
+
+  <!-- R2 → throws error on duplicate -->
+  <rect x="910" y="302" width="140" height="22" rx="4" fill="#F8514910" stroke="#F8514940" stroke-width="1"/>
+  <text x="980" y="317" fill="#F85149" font-size="9" text-anchor="middle" class="ui">throws ConflictError if found</text>
+  <line x1="935" y1="333" x2="950" y2="324" stroke="#F8514960" stroke-width="1"/>
+
+  <!-- Legend -->
+  <rect x="295" y="800" width="480" height="50" rx="8" fill="#111827" stroke="#1E2D45" stroke-width="1"/>
+  <circle cx="314" cy="818" r="3" fill="#4F9EFF"/>
+  <text x="322" y="821" fill="#8B949E" font-size="9" class="ui">Incoming caller</text>
+  <circle cx="420" cy="818" r="3" fill="#3FB950"/>
+  <text x="428" y="821" fill="#8B949E" font-size="9" class="ui">Service / Utility</text>
+  <circle cx="525" cy="818" r="3" fill="#2DD4BF"/>
+  <text x="533" y="821" fill="#8B949E" font-size="9" class="ui">Database</text>
+  <circle cx="608" cy="818" r="3" fill="#F5A623"/>
+  <text x="616" y="821" fill="#8B949E" font-size="9" class="ui">External / Library</text>
+  <circle cx="720" cy="818" r="3" fill="#BC8CFF"/>
+  <text x="728" y="821" fill="#8B949E" font-size="9" class="ui">Middleware</text>
+  <!-- row 2 -->
+  <line x1="308" y1="840" x2="328" y2="840" stroke="#4F9EFF" stroke-width="1.5"/>
+  <text x="334" y="843" fill="#8B949E" font-size="9" class="ui">Solid = direct call</text>
+  <line x1="430" y1="840" x2="450" y2="840" stroke="#4F9EFF" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="456" y="843" fill="#8B949E" font-size="9" class="ui">Dashed = frontend call site</text>
+  <rect x="600" y="833" width="42" height="14" rx="3" fill="#F8514910" stroke="#F8514940" stroke-width="1"/>
+  <text x="621" y="844" fill="#F85149" font-size="8" text-anchor="middle" class="ui">error</text>
+  <text x="648" y="843" fill="#8B949E" font-size="9" class="ui">= throws / error path</text>
+
+  <!-- ── RIGHT PANEL: Contract + Insights w=360 ── -->
+  <rect x="1080" y="60" width="360" height="816" fill="#0D1117"/>
+  <rect x="1080" y="60" width="1" height="816" fill="#1E2D45"/>
+
+  <!-- Header -->
+  <rect x="1080" y="60" width="360" height="36" fill="#0D1117"/>
+  <rect x="1080" y="60" width="3" height="36" fill="#BC8CFF"/>
+  <text x="1096" y="82" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="1" class="ui">FUNCTION CONTRACT</text>
+  <rect x="1080" y="95" width="360" height="1" fill="#1E2D45"/>
+
+  <!-- Function signature -->
+  <rect x="1092" y="104" width="336" height="52" rx="8" fill="#070B14" stroke="#4F9EFF40" stroke-width="1"/>
+  <rect x="1092" y="104" width="3" height="52" fill="#4F9EFF"/>
+  <text x="1104" y="122" class="mono" font-size="10"><tspan fill="#BC8CFF">async</tspan><tspan fill="#E6EDF3"> </tspan><tspan fill="#4F9EFF">createUser</tspan><tspan fill="#E6EDF3">(</tspan></text>
+  <text x="1104" y="138" class="mono" font-size="10"><tspan fill="#E6EDF3">  data: </tspan><tspan fill="#79C0FF">CreateUserDTO</tspan></text>
+  <text x="1104" y="154" class="mono" font-size="10"><tspan fill="#E6EDF3">): </tspan><tspan fill="#79C0FF">Promise</tspan><tspan fill="#E6EDF3">&lt;</tspan><tspan fill="#79C0FF">User</tspan><tspan fill="#E6EDF3">&gt;</tspan></text>
+
+  <!-- INPUT section -->
+  <text x="1096" y="178" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">INPUT  data: CreateUserDTO</text>
+  <rect x="1092" y="186" width="336" height="130" rx="6" fill="#070B14" stroke="#4F9EFF30" stroke-width="1"/>
+  <rect x="1092" y="186" width="3" height="130" fill="#4F9EFF"/>
+  <text x="1104" y="204" class="mono" font-size="10"><tspan fill="#4A5568">{</tspan></text>
+  <text x="1104" y="220" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"email"</tspan>
+    <tspan fill="#4A5568">:    </tspan><tspan fill="#79C0FF">string</tspan>
+    <tspan fill="#F85149">  *</tspan>
+  </text>
+  <text x="1104" y="236" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"password"</tspan>
+    <tspan fill="#4A5568">: </tspan><tspan fill="#79C0FF">string</tspan>
+    <tspan fill="#F85149">  *</tspan>
+  </text>
+  <text x="1104" y="252" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"name"</tspan>
+    <tspan fill="#4A5568">:    </tspan><tspan fill="#79C0FF">string</tspan>
+    <tspan fill="#F85149">  *</tspan>
+  </text>
+  <text x="1104" y="268" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"role"</tspan>
+    <tspan fill="#4A5568">:    </tspan><tspan fill="#3FB950">"user" | "admin"</tspan>
+  </text>
+  <text x="1104" y="284" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"avatar"</tspan>
+    <tspan fill="#4A5568">:  </tspan><tspan fill="#79C0FF">string?</tspan>
+    <tspan fill="#4A5568">  // optional</tspan>
+  </text>
+  <text x="1104" y="302" class="mono" font-size="10"><tspan fill="#4A5568">}  </tspan><tspan fill="#F85149">* required</tspan></text>
+
+  <!-- OUTPUT section -->
+  <text x="1096" y="330" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">OUTPUT  Promise&lt;User&gt;</text>
+  <rect x="1092" y="338" width="336" height="140" rx="6" fill="#070B14" stroke="#3FB95030" stroke-width="1"/>
+  <rect x="1092" y="338" width="3" height="140" fill="#3FB950"/>
+  <text x="1104" y="356" class="mono" font-size="10"><tspan fill="#4A5568">{</tspan></text>
+  <text x="1104" y="372" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"id"</tspan>
+    <tspan fill="#4A5568">:         </tspan><tspan fill="#79C0FF">string</tspan>
+  </text>
+  <text x="1104" y="388" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"email"</tspan>
+    <tspan fill="#4A5568">:      </tspan><tspan fill="#79C0FF">string</tspan>
+  </text>
+  <text x="1104" y="404" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"name"</tspan>
+    <tspan fill="#4A5568">:       </tspan><tspan fill="#79C0FF">string</tspan>
+  </text>
+  <text x="1104" y="420" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"role"</tspan>
+    <tspan fill="#4A5568">:       </tspan><tspan fill="#3FB950">"user" | "admin"</tspan>
+  </text>
+  <text x="1104" y="436" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"createdAt"</tspan>
+    <tspan fill="#4A5568">:  </tspan><tspan fill="#79C0FF">Date</tspan>
+  </text>
+  <text x="1104" y="452" class="mono" font-size="10">
+    <tspan fill="#4A5568">  </tspan><tspan fill="#3FB950">"token"</tspan>
+    <tspan fill="#4A5568">:      </tspan><tspan fill="#79C0FF">string</tspan>
+    <tspan fill="#4A5568">  // JWT</tspan>
+  </text>
+  <text x="1104" y="468" class="mono" font-size="10"><tspan fill="#4A5568">}</tspan></text>
+
+  <!-- THROWS section -->
+  <text x="1096" y="498" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">THROWS</text>
+  <rect x="1092" y="506" width="336" height="100" rx="6" fill="#070B14" stroke="#F8514930" stroke-width="1"/>
+  <rect x="1092" y="506" width="3" height="100" fill="#F85149"/>
+  <rect x="1104" y="516" width="100" height="16" rx="4" fill="#F8514918"/>
+  <text x="1154" y="528" fill="#F85149" font-size="9" text-anchor="middle" class="mono">ConflictError</text>
+  <text x="1212" y="528" fill="#8B949E" font-size="9" class="ui">Email already exists</text>
+  <rect x="1104" y="538" width="120" height="16" rx="4" fill="#F8514918"/>
+  <text x="1164" y="550" fill="#F85149" font-size="9" text-anchor="middle" class="mono">ValidationError</text>
+  <text x="1232" y="550" fill="#8B949E" font-size="9" class="ui">Invalid email format</text>
+  <rect x="1104" y="560" width="110" height="16" rx="4" fill="#F8514918"/>
+  <text x="1159" y="572" fill="#F85149" font-size="9" text-anchor="middle" class="mono">DatabaseError</text>
+  <text x="1222" y="572" fill="#8B949E" font-size="9" class="ui">Connection failed</text>
+  <rect x="1104" y="582" width="110" height="16" rx="4" fill="#F8514918"/>
+  <text x="1159" y="594" fill="#F85149" font-size="9" text-anchor="middle" class="mono">EmailError</text>
+  <text x="1222" y="594" fill="#8B949E" font-size="9" class="ui">Notification failed (non-fatal)</text>
+
+  <!-- CALL STATS -->
+  <text x="1096" y="630" fill="#E6EDF3" font-size="10" font-weight="700" letter-spacing="0.5" class="ui">CALL STATISTICS</text>
+  <rect x="1092" y="638" width="160" height="52" rx="6" fill="#111827" stroke="#1E2D45" stroke-width="1"/>
+  <text x="1172" y="661" fill="#4F9EFF" font-size="20" font-weight="700" text-anchor="middle" class="mono">3</text>
+  <text x="1172" y="677" fill="#4A5568" font-size="9" text-anchor="middle" class="ui">callers</text>
+  <rect x="1260" y="638" width="160" height="52" rx="6" fill="#111827" stroke="#1E2D45" stroke-width="1"/>
+  <text x="1340" y="661" fill="#3FB950" font-size="20" font-weight="700" text-anchor="middle" class="mono">6</text>
+  <text x="1340" y="677" fill="#4A5568" font-size="9" text-anchor="middle" class="ui">outgoing calls</text>
+
+  <!-- AI Insights chips -->
+  <rect x="1092" y="706" width="336" height="50" rx="8" fill="#BC8CFF0C" stroke="#BC8CFF30" stroke-width="1"/>
+  <rect x="1092" y="706" width="3" height="50" fill="#BC8CFF"/>
+  <text x="1104" y="724" fill="#BC8CFF" font-size="10" font-weight="600" class="ui">AI Insight</text>
+  <text x="1104" y="742" fill="#8B949E" font-size="10" class="ui">No circular dependencies detected. Consider adding</text>
+  <text x="1104" y="754" fill="#8B949E" font-size="10" class="ui">retry logic to emailService.send() for resilience.</text>
+
+  <!-- Action buttons -->
+  <rect x="1092" y="768" width="160" height="30" rx="6" fill="#BC8CFF18" stroke="#BC8CFF40" stroke-width="1"/>
+  <text x="1172" y="787" fill="#BC8CFF" font-size="11" font-weight="600" text-anchor="middle" class="ui">Generate Tests</text>
+  <rect x="1260" y="768" width="168" height="30" rx="6" fill="#1C2333" stroke="#263554" stroke-width="1"/>
+  <text x="1344" y="787" fill="#E6EDF3" font-size="11" text-anchor="middle" class="ui">Export Mermaid</text>
+
+  <!-- Status bar -->
+  <rect y="876" width="1440" height="24" fill="#111827"/><rect y="876" width="1440" height="1" fill="#1E2D45"/>
+  <circle cx="14" cy="889" r="3" fill="#4F9EFF"/>
+  <text x="24" y="893" fill="#4F9EFF" font-size="10" class="ui">UserService.createUser()</text>
+  <text x="190" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="202" y="893" fill="#8B949E" font-size="10" class="ui">3 callers</text>
+  <text x="264" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="276" y="893" fill="#8B949E" font-size="10" class="ui">6 outgoing calls</text>
+  <text x="384" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="396" y="893" fill="#3FB950" font-size="10" class="ui">No circular deps</text>
+  <text x="502" y="893" fill="#4A5568" font-size="10" class="ui">│</text>
+  <text x="514" y="893" fill="#F5A623" font-size="10" class="ui">1 AI suggestion</text>
+</svg>
+
+</body>
+</html>
