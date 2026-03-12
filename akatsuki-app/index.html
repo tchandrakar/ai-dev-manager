@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval';" />
+    <title>Akatsuki</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+      body {
+        background: #070B14;
+        color: #E6EDF3;
+        font-family: 'Outfit', 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #0D1117; }
+      ::-webkit-scrollbar-thumb { background: #1E2D45; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #263554; }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Browser dev mock – only active outside Electron
+      if (!window.akatsuki) {
+        const noop = () => Promise.resolve({});
+        const noopNull = () => Promise.resolve(null);
+        window.akatsuki = {
+          config:  { load: () => Promise.resolve({}), save: noop },
+          workdir: { select: () => Promise.resolve({ canceled: true }), init: noop, open: noop, stats: noopNull, clear: noop },
+          memory:  { saveReview: noop, updateOutcome: noop, queryContext: () => Promise.resolve({}), buildContextBlock: () => Promise.resolve(""), getStats: noopNull, listReviews: () => Promise.resolve({ reviews: [] }) },
+          review:  { saveFile: noop, deleteFile: noop },
+          ai:      { review: noop, chat: noop },
+          git:     { fetchPR: noop, fetchDiff: noop, postReview: noop, testAuth: () => Promise.resolve({ ok: true, username: "demo-user", name: "Demo" }), bitbucketWorkspaces: () => Promise.resolve({ workspaces: [{ slug: "my-workspace", name: "My Workspace" }, { slug: "demo-org", name: "Demo Org" }] }) },
+          shell:   { openExternal: (url) => { window.open(url, "_blank"); return Promise.resolve({}); } },
+          kawaiidb: { testConnection: () => Promise.resolve({ ok: false, msg: "Connection testing not available in browser preview" }) },
+          shinra:  { readDir: () => Promise.resolve({ entries: [] }), readFile: () => Promise.resolve({ content: "", size: 0 }), writeFile: () => Promise.resolve({ ok: true }), fileStat: () => Promise.resolve({ size: 0, isDir: false, isFile: true }), searchFiles: () => Promise.resolve({ results: [] }), runCommand: () => Promise.resolve({ stdout: "", stderr: "", exitCode: 0 }), selectFolder: () => Promise.resolve({ canceled: true }), shellCreate: () => Promise.resolve({ ok: true, pid: 0, shell: "/bin/zsh" }), shellWrite: () => Promise.resolve({ ok: true }), shellDestroy: () => Promise.resolve({ ok: true }), onShellStdout: () => {}, onShellStderr: () => {}, onShellExit: () => {}, removeShellListeners: () => {} },
+        };
+      }
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/renderer/main.jsx"></script>
+  </body>
+</html>
