@@ -791,7 +791,7 @@ function computeSummary(entries) {
 
 // ── Main Screen ─────────────────────────────────────────────────────────────
 function ScreenHistory() {
-  const { setActiveTab } = useKawaii();
+  const { setActiveTab, setAiAnalyzeInitialSQL } = useKawaii();
   const [history, setHistory] = useState(loadHistory);
   const [filter, setFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
@@ -853,16 +853,18 @@ function ScreenHistory() {
   // ── Actions ─────────────────────────────────────────────────────────────
   const handleOpen = useCallback(
     (entry) => {
+      if (entry.sql) setAiAnalyzeInitialSQL(entry.sql);
       setActiveTab("ai-analyze");
     },
-    [setActiveTab]
+    [setActiveTab, setAiAnalyzeInitialSQL]
   );
 
   const handleRerun = useCallback(
     (entry) => {
+      if (entry.sql) setAiAnalyzeInitialSQL(entry.sql);
       setActiveTab("ai-analyze");
     },
-    [setActiveTab]
+    [setActiveTab, setAiAnalyzeInitialSQL]
   );
 
   const handleApply = useCallback(

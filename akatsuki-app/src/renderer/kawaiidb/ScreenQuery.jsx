@@ -449,7 +449,7 @@ function ScreenQuery() {
     setSqlTabs((prev) => prev.map((t) => t.id === id ? { ...t, name: newName } : t));
   };
 
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback(async () => {
     const sql = (tabContents[activeSqlTab] || "").trim();
     if (!sql) {
       setTabResults((prev) => ({ ...prev, [activeSqlTab]: { error: "Empty query. Write some SQL and press Run." } }));
@@ -461,96 +461,43 @@ function ScreenQuery() {
       return;
     }
 
-    // Simulate query execution
-    const startTime = performance.now();
+    // Show loading state
+    setTabResults((prev) => ({ ...prev, [activeSqlTab]: { loading: true } }));
 
-    // Basic SQL parsing to determine query type
-    const upper = sql.toUpperCase().replace(/--.*$/gm, "").trim();
-    const isSelect = upper.startsWith("SELECT");
-    const isInsert = upper.startsWith("INSERT");
-    const isUpdate = upper.startsWith("UPDATE");
-    const isDelete = upper.startsWith("DELETE");
-    const isCreate = upper.startsWith("CREATE");
-    const isDrop = upper.startsWith("DROP");
-    const isAlter = upper.startsWith("ALTER");
+    try {
+      const result = await window.akatsuki.kawaiidb.executeQuery({
+        connectionId: activeConnection.id,
+        sql,
+      });
 
-    // Check for basic syntax errors
-    if (isSelect && !upper.includes("FROM") && !upper.includes("DUAL")) {
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: { error: `Syntax error: SELECT query missing FROM clause` },
-      }));
-      return;
-    }
-
-    const elapsed = ((performance.now() - startTime) + Math.random() * 20).toFixed(3);
-
-    if (isSelect) {
-      // Parse column names from SELECT ... FROM
-      const selectMatch = sql.match(/SELECT\s+([\s\S]*?)\s+FROM/i);
-      const cols = [];
-      if (selectMatch) {
-        const colPart = selectMatch[1];
-        if (colPart.trim() === "*") {
-          cols.push("id", "name", "created_at");
-        } else {
-          colPart.split(",").forEach((c) => {
-            const trimmed = c.trim();
-            // Handle aliases: "col AS alias" or "func(col) alias"
-            const asMatch = trimmed.match(/\bAS\s+(\w+)\s*$/i) || trimmed.match(/\)\s+(\w+)\s*$/);
-            if (asMatch) {
-              cols.push(asMatch[1]);
-            } else {
-              const parts = trimmed.split(".");
-              const name = parts[parts.length - 1].replace(/[`"]/g, "").trim();
-              if (name && name !== "*") cols.push(name);
-              else if (name === "*") cols.push("id", "name", "created_at");
-            }
-          });
-        }
+      if (result.error) {
+        setTabResults((prev) => ({
+          ...prev,
+          [activeSqlTab]: { error: result.error, time: `${result.duration || 0}ms` },
+        }));
+      } else if (result.rows && result.rows.length > 0) {
+        setTabResults((prev) => ({
+          ...prev,
+          [activeSqlTab]: {
+            data: result.rows,
+            message: null,
+            time: `${result.duration || 0}ms`,
+            rowCount: result.rowCount,
+          },
+        }));
       } else {
-        cols.push("result");
+        setTabResults((prev) => ({
+          ...prev,
+          [activeSqlTab]: {
+            message: result.message || `${result.rowCount || 0} rows affected`,
+            time: `${result.duration || 0}ms`,
+          },
+        }));
       }
-
-      // Generate sample result row
-      const sampleRow = {};
-      cols.forEach((c) => { sampleRow[c] = `(${activeConnection.database})`; });
-
+    } catch (e) {
       setTabResults((prev) => ({
         ...prev,
-        [activeSqlTab]: {
-          data: [sampleRow],
-          message: null,
-          time: `${elapsed}ms`,
-          rowCount: 0,
-          info: `Query executed on ${activeConnection.name}. Connect to a real database to see actual results.`,
-        },
-      }));
-    } else if (isInsert || isUpdate || isDelete) {
-      const action = isInsert ? "INSERT" : isUpdate ? "UPDATE" : "DELETE";
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          message: `${action} executed successfully on ${activeConnection.name}`,
-          time: `${elapsed}ms`,
-        },
-      }));
-    } else if (isCreate || isDrop || isAlter) {
-      const action = isCreate ? "CREATE" : isDrop ? "DROP" : "ALTER";
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          message: `${action} statement executed successfully`,
-          time: `${elapsed}ms`,
-        },
-      }));
-    } else {
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          message: `Query executed on ${activeConnection.name}`,
-          time: `${elapsed}ms`,
-        },
+        [activeSqlTab]: { error: e.message || "Query execution failed" },
       }));
     }
   }, [activeSqlTab, tabContents, activeConnection]);

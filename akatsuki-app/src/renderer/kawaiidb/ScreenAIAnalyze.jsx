@@ -1,7 +1,9 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { T } from "../tokens";
 import { PanelHeader, Btn } from "../components";
 import { useKawaii } from "./KawaiiApp";
+import { DB_TYPES } from "./mockData";
+import { addAnalysisToHistory } from "./ScreenHistory";
 
 // ── SQL Syntax Highlighter (shared) ─────────────────────────────────────────
 const SQL_KEYWORDS = new Set([
@@ -843,7 +845,7 @@ function computeHighlights(sql, issues) {
 
 // ── Main Screen ─────────────────────────────────────────────────────────────
 function ScreenAIAnalyze() {
-  const { activeConnection, setActiveTab, setSqlTabs, activeSqlTab } = useKawaii();
+  const { activeConnection, setActiveTab, setSqlTabs, activeSqlTab, aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL } = useKawaii();
 
   const [inputSQL, setInputSQL] = useState("");
   const [analysis, setAnalysis] = useState(null); // { issues, score }
@@ -852,20 +854,68 @@ function ScreenAIAnalyze() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const handleAnalyze = useCallback(() => {
+  // Consume initial SQL from History (cross-screen navigation)
+  useEffect(() => {
+    if (aiAnalyzeInitialSQL) {
+      setInputSQL(aiAnalyzeInitialSQL);
+      setAiAnalyzeInitialSQL(null);
+    }
+  }, [aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL]);
+
+  const handleAnalyze = useCallback(async () => {
     const trimmed = inputSQL.trim();
     if (!trimmed) return;
 
     setIsAnalyzing(true);
-    // Simulate brief analysis delay
-    setTimeout(() => {
-      const result = analyzeSQL(trimmed);
-      setAnalysis(result);
-      setOptimizedSQL(generateOptimizedSQL(trimmed));
+
+    // Local static analysis (always works, even offline)
+    const result = analyzeSQL(trimmed);
+    setAnalysis(result);
+    setOptimizedSQL(generateOptimizedSQL(trimmed));
+
+    // Try to get real execution plan via IPC
+    if (activeConnection) {
+      try {
+        const explainResult = await window.akatsuki.kawaiidb.explainQuery({
+          connectionId: activeConnection.id,
+          sql: trimmed,
+        });
+        if (explainResult.plan && explainResult.plan.length > 0) {
+          setExecutionPlan(explainResult.plan);
+        } else {
+          setExecutionPlan(generateExecutionPlan(trimmed));
+        }
+      } catch {
+        setExecutionPlan(generateExecutionPlan(trimmed));
+      }
+    } else {
       setExecutionPlan(generateExecutionPlan(trimmed));
-      setIsAnalyzing(false);
-    }, 300);
-  }, [inputSQL]);
+    }
+
+    // Auto-save to history
+    try {
+      const { issues, score } = result;
+      addAnalysisToHistory({
+        title: issues[0]?.title || "SQL Analysis",
+        sql: trimmed,
+        aiSummary: `Found ${issues.length} issues, score: ${score}/100`,
+        connectionId: activeConnection?.id,
+        connectionName: activeConnection?.name,
+        connectionColor: activeConnection?.type ? (DB_TYPES[activeConnection.type]?.color || "#3DEFE9") : "#3DEFE9",
+        dbType: activeConnection?.version || (activeConnection?.type ? DB_TYPES[activeConnection.type]?.label : "Unknown"),
+        database: activeConnection?.database,
+        score,
+        issues: {
+          critical: issues.filter((i) => i.severity === "critical").length,
+          warning: issues.filter((i) => i.severity === "warning").length,
+          info: issues.filter((i) => i.severity === "info" || i.severity === "suggest").length,
+        },
+        improvement: Math.min(99, Math.max(10, 100 - score)),
+      });
+    } catch {}
+
+    setIsAnalyzing(false);
+  }, [inputSQL, activeConnection]);
 
   const handleCopy = useCallback(() => {
     if (!optimizedSQL) return;

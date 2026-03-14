@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { T } from "../tokens";
 import { PanelHeader } from "../components";
 import { useKawaii } from "./KawaiiApp";
@@ -422,9 +422,55 @@ function QueriesByTypeChart({ connectionCount }) {
 
 // ── Active Queries Table ─────────────────────────────────────────────────────
 
-function ActiveQueriesTable() {
-  const headers = ["PID", "USER", "DATABASE", "QUERY", "DURATION", "STATE", "ACTIONS"];
-  const colWidths = ["60px", "90px", "90px", "1fr", "80px", "90px", "60px"];
+function ActiveQueryRow({ q }) {
+  const durSec = parseInt(q.duration) || 0;
+  const durColor = durSec > 10 ? T.red : durSec > 3 ? T.amber : T.green;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "60px 90px 90px 1fr 80px 90px",
+        padding: "6px 12px",
+        borderBottom: `1px solid ${T.border}30`,
+        fontSize: 11,
+        fontFamily: T.fontMono,
+        color: T.txt2,
+        alignItems: "center",
+      }}
+    >
+      <span>{q.pid}</span>
+      <span>{q.user}</span>
+      <span style={{ color: T.teal }}>{q.db}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{q.query}</span>
+      <span style={{ color: durColor, fontWeight: 600 }}>{q.duration}</span>
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "1px 6px", borderRadius: 6, fontSize: 9, fontWeight: 600,
+        background: `${T.green}18`, border: `1px solid ${T.green}30`, color: T.green,
+      }}>{q.state}</span>
+    </div>
+  );
+}
+
+function ActiveQueriesTable({ activeConnection }) {
+  const [queries, setQueries] = useState([]);
+
+  useEffect(() => {
+    if (!activeConnection) { setQueries([]); return; }
+    let cancelled = false;
+    const fetchQueries = async () => {
+      try {
+        const result = await window.akatsuki.kawaiidb.getActiveQueries({ connectionId: activeConnection.id });
+        if (!cancelled && result.queries) setQueries(result.queries);
+      } catch {}
+    };
+    fetchQueries();
+    const interval = setInterval(fetchQueries, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeConnection?.id]);
+
+  const headers = ["PID", "USER", "DATABASE", "QUERY", "DURATION", "STATE"];
+  const colWidths = ["60px", "90px", "90px", "1fr", "80px", "90px"];
 
   return (
     <div
@@ -450,18 +496,17 @@ function ActiveQueriesTable() {
             borderRadius: 9,
             fontSize: 10,
             fontWeight: 600,
-            background: `${T.txt3}18`,
-            border: `1px solid ${T.txt3}40`,
-            color: T.txt3,
+            background: queries.length > 0 ? `${T.green}18` : `${T.txt3}18`,
+            border: `1px solid ${queries.length > 0 ? T.green : T.txt3}40`,
+            color: queries.length > 0 ? T.green : T.txt3,
             fontFamily: T.fontUI,
           }}
         >
-          0 running
+          {queries.length} running
         </span>
       </PanelHeader>
 
       <div style={{ flex: 1, overflow: "auto" }}>
-        {/* Table header */}
         <div
           style={{
             display: "grid",
@@ -475,44 +520,22 @@ function ActiveQueriesTable() {
           }}
         >
           {headers.map((h) => (
-            <span
-              key={h}
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 1,
-                color: T.txt3,
-                fontFamily: T.fontUI,
-                textTransform: "uppercase",
-              }}
-            >
-              {h}
-            </span>
+            <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, color: T.txt3, fontFamily: T.fontUI, textTransform: "uppercase" }}>{h}</span>
           ))}
         </div>
 
-        {/* Empty state */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "48px 20px",
-            gap: 8,
-          }}
-        >
-          <svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-            <circle cx={12} cy={12} r={10} stroke={T.txt3} strokeWidth={1.5} strokeDasharray="3 3" />
-            <path d="M8 12h8M12 8v8" stroke={T.txt3} strokeWidth={1.5} strokeLinecap="round" opacity={0.4} />
-          </svg>
-          <span style={{ fontSize: 13, color: T.txt2, fontFamily: T.fontUI, fontWeight: 500 }}>
-            No active queries
-          </span>
-          <span style={{ fontSize: 11, color: T.txt3, fontFamily: T.fontUI }}>
-            Active queries will appear here in real time
-          </span>
-        </div>
+        {queries.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 20px", gap: 8 }}>
+            <svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+              <circle cx={12} cy={12} r={10} stroke={T.txt3} strokeWidth={1.5} strokeDasharray="3 3" />
+              <path d="M8 12h8M12 8v8" stroke={T.txt3} strokeWidth={1.5} strokeLinecap="round" opacity={0.4} />
+            </svg>
+            <span style={{ fontSize: 13, color: T.txt2, fontFamily: T.fontUI, fontWeight: 500 }}>No active queries</span>
+            <span style={{ fontSize: 11, color: T.txt3, fontFamily: T.fontUI }}>Active queries will appear here in real time</span>
+          </div>
+        ) : (
+          queries.map((q, i) => <ActiveQueryRow key={q.pid || i} q={q} />)
+        )}
       </div>
     </div>
   );
@@ -575,8 +598,9 @@ function ServerInfoRow({ label, value, valueColor, progress, progressColor, isLa
 
 // ── Server Info Panel ────────────────────────────────────────────────────────
 
-function ServerInfoPanel({ activeConnection }) {
+function ServerInfoPanel({ activeConnection, realServerInfo }) {
   const serverInfo = useMemo(() => {
+    if (realServerInfo && realServerInfo.serverInfo) return realServerInfo.serverInfo;
     if (!activeConnection) return [];
 
     const dbInfo = DB_TYPES[activeConnection.type];
@@ -588,12 +612,9 @@ function ServerInfoPanel({ activeConnection }) {
       { label: "Connection", value: activeConnection.name },
       { label: "Database", value: activeConnection.database || "--" },
       { label: "Host", value: activeConnection.host || "--" },
-      { label: "Uptime", value: "-- pending --" },
-      { label: "Buffer Pool", value: "-- / --", progress: 0, progressColor: T.green },
-      { label: "Slow Queries", value: "--", valueColor: T.txt3 },
-      { label: "Connections Used", value: "--", progress: 0, progressColor: T.teal },
+      { label: "Uptime", value: "Loading..." },
     ];
-  }, [activeConnection]);
+  }, [activeConnection, realServerInfo]);
 
   return (
     <div
@@ -685,8 +706,38 @@ function ScreenDashboard() {
   const connectionCount = connections ? connections.length : 0;
   const onlineCount = connections ? connections.filter((c) => c.status === "online").length : 0;
 
-  // Simulated metrics derived from real state
+  // Fetch real server metrics via IPC
+  const [realServerInfo, setRealServerInfo] = useState(null);
+
+  useEffect(() => {
+    if (!activeConnection) { setRealServerInfo(null); return; }
+    let cancelled = false;
+    const fetchInfo = async () => {
+      try {
+        const info = await window.akatsuki.kawaiidb.getServerInfo({ connectionId: activeConnection.id });
+        if (!cancelled && info && !info.error) setRealServerInfo(info);
+      } catch {}
+    };
+    fetchInfo();
+    const interval = setInterval(fetchInfo, 10000); // Poll every 10s
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeConnection?.id]);
+
+  // Derive metrics from real data or fallback to seeded random
   const metrics = useMemo(() => {
+    if (realServerInfo && realServerInfo.metrics) {
+      const m = realServerInfo.metrics;
+      const diskPct = m.diskTotal > 0 ? Math.round((m.diskUsed / m.diskTotal) * 100) : 0;
+      return {
+        queriesPerSec: (m.queriesPerSec || 0).toLocaleString(),
+        avgQueryTime: `${m.avgQueryTime || 0}ms`,
+        p95: realServerInfo.uptime ? `uptime: ${realServerInfo.uptime}` : "",
+        diskUsed: m.diskUsed || 0,
+        diskTotal: m.diskTotal || 100,
+        diskPct,
+      };
+    }
+    // Fallback: seeded random (when no real data yet)
     const rng = seededRandom(connectionCount * 17 + 42);
     const queriesPerSec = Math.floor(200 + rng() * 1800);
     const avgQueryTime = Math.floor(10 + rng() * 40);
@@ -694,16 +745,13 @@ function ScreenDashboard() {
     const diskUsed = +(20 + rng() * 60).toFixed(1);
     const diskTotal = 100;
     const diskPct = Math.round((diskUsed / diskTotal) * 100);
-
     return {
       queriesPerSec: queriesPerSec.toLocaleString(),
       avgQueryTime: `${avgQueryTime}ms`,
       p95: `p95: ${p95}ms`,
-      diskUsed,
-      diskTotal,
-      diskPct,
+      diskUsed, diskTotal, diskPct,
     };
-  }, [connectionCount]);
+  }, [connectionCount, realServerInfo]);
 
   if (!activeConnection) {
     return (
@@ -782,8 +830,8 @@ function ScreenDashboard() {
 
       {/* ── Charts Row 2 ───────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <ActiveQueriesTable />
-        <ServerInfoPanel activeConnection={activeConnection} />
+        <ActiveQueriesTable activeConnection={activeConnection} />
+        <ServerInfoPanel activeConnection={activeConnection} realServerInfo={realServerInfo} />
       </div>
     </div>
   );

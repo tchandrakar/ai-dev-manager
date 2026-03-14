@@ -4,12 +4,14 @@ import { DB_TYPES } from "./mockData";
 
 // ── localStorage persistence helpers ─────────────────────────────────────────
 const LS_KEY_CONNECTIONS = "kawaiidb:connections";
+const LS_KEY_ACTIVE_CONN = "kawaiidb:activeConnectionId";
 
 function loadConnections() {
   try {
     const raw = localStorage.getItem(LS_KEY_CONNECTIONS);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Load as-is; a startup health-check effect will probe real status.
       if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
@@ -18,6 +20,17 @@ function loadConnections() {
 
 function saveConnections(conns) {
   try { localStorage.setItem(LS_KEY_CONNECTIONS, JSON.stringify(conns)); } catch {}
+}
+
+function loadActiveConnectionId() {
+  try { return localStorage.getItem(LS_KEY_ACTIVE_CONN) || null; } catch { return null; }
+}
+
+function saveActiveConnectionId(id) {
+  try {
+    if (id) localStorage.setItem(LS_KEY_ACTIVE_CONN, id);
+    else localStorage.removeItem(LS_KEY_ACTIVE_CONN);
+  } catch {}
 }
 
 // ── Lazy screen imports ──────────────────────────────────────────────────────
@@ -52,11 +65,46 @@ function ScreenLoader() {
 }
 
 // ── Connection selector dropdown ─────────────────────────────────────────────
-function ConnectionSelector({ connections, activeConnection, onSelect }) {
+function ConnectionSelector({ connections, activeConnection, onSelect, onConnect }) {
   const [open, setOpen] = useState(false);
+  const [connectingId, setConnectingId] = useState(null);
 
-  const onlineConnections = connections.filter((c) => c.status === "online");
   const selected = activeConnection;
+
+  const handleSelect = async (conn) => {
+    if (conn.status === "online") {
+      // Already online — just select it
+      onSelect(conn);
+      setOpen(false);
+    } else {
+      // Offline — try to connect (persistent pool)
+      setConnectingId(conn.id);
+      try {
+        let host = conn.host || "";
+        let port = conn.port || null;
+        if (!port && host.includes(":")) {
+          const parts = host.split(":");
+          host = parts[0];
+          port = parts[1];
+        }
+        const result = await window.akatsuki.kawaiidb.connect({
+          id: conn.id, type: conn.type, host, port,
+          database: conn.database,
+          username: conn.username,
+          password: conn.password,
+        });
+        if (result.ok) {
+          const updated = { ...conn, status: "online", lastUsed: "Just now", ...(result.version ? { version: result.version } : {}) };
+          onConnect(updated);
+          setOpen(false);
+        }
+      } catch (e) {
+        // silently fail — connection stays offline
+      } finally {
+        setConnectingId(null);
+      }
+    }
+  };
 
   return (
     <div style={{ position: "relative" }}>
@@ -98,7 +146,7 @@ function ConnectionSelector({ connections, activeConnection, onSelect }) {
             position: "absolute",
             top: "calc(100% + 4px)",
             right: 0,
-            minWidth: 220,
+            minWidth: 240,
             background: T.bg3,
             border: `1px solid ${T.border2}`,
             borderRadius: 8,
@@ -107,7 +155,7 @@ function ConnectionSelector({ connections, activeConnection, onSelect }) {
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}
         >
-          {onlineConnections.length === 0 && (
+          {connections.length === 0 && (
             <div
               style={{
                 padding: "8px 12px",
@@ -116,19 +164,19 @@ function ConnectionSelector({ connections, activeConnection, onSelect }) {
                 fontFamily: T.fontUI,
               }}
             >
-              No online connections
+              No connections — create one in Connections tab
             </div>
           )}
-          {onlineConnections.map((conn) => {
+          {connections.map((conn) => {
             const dbInfo = DB_TYPES[conn.type];
             const isActive = selected && selected.id === conn.id;
+            const isOnline = conn.status === "online";
+            const isConnecting = connectingId === conn.id;
             return (
               <button
                 key={conn.id}
-                onClick={() => {
-                  onSelect(conn);
-                  setOpen(false);
-                }}
+                onClick={() => handleSelect(conn)}
+                disabled={isConnecting}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -138,11 +186,12 @@ function ConnectionSelector({ connections, activeConnection, onSelect }) {
                   background: isActive ? T.bg4 : "transparent",
                   border: "none",
                   borderRadius: 6,
-                  cursor: "pointer",
+                  cursor: isConnecting ? "wait" : "pointer",
                   fontFamily: T.fontMono,
                   fontSize: 11,
                   color: isActive ? T.txt : T.txt2,
                   textAlign: "left",
+                  opacity: isConnecting ? 0.6 : 1,
                 }}
               >
                 <span
@@ -150,11 +199,13 @@ function ConnectionSelector({ connections, activeConnection, onSelect }) {
                     width: 6,
                     height: 6,
                     borderRadius: "50%",
-                    background: T.green,
+                    background: isOnline ? T.green : T.txt3,
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ flex: 1 }}>{conn.name}</span>
+                <span style={{ flex: 1 }}>
+                  {isConnecting ? "Connecting..." : conn.name}
+                </span>
                 <span
                   style={{
                     fontSize: 9,
@@ -204,9 +255,81 @@ function KawaiiApp({ initialTab, onNavigate }) {
     saveConnections(connections);
   }, [connections]);
 
+  // Persist active connection ID whenever it changes (skip first render so we
+  // don't overwrite the saved ID with null before the health check reads it)
+  const isFirstRenderConn = useRef(true);
+  useEffect(() => {
+    if (isFirstRenderConn.current) { isFirstRenderConn.current = false; return; }
+    saveActiveConnectionId(activeConnection ? activeConnection.id : null);
+  }, [activeConnection]);
+
+  // ── Startup health check: probe ALL connections in parallel ───────────────
+  // For the last-active connection, use `connect` (establishes persistent pool).
+  // For all others, use `testConnection` (lightweight reachability check).
+  const hasCheckedRef = useRef(false);
+  useEffect(() => {
+    if (hasCheckedRef.current || connections.length === 0) return;
+    hasCheckedRef.current = true;
+
+    const savedActiveId = loadActiveConnectionId();
+
+    const extractHostPort = (conn) => {
+      let host = conn.host || "";
+      let port = conn.port || null;
+      if (!port && host.includes(":")) {
+        const parts = host.split(":");
+        host = parts[0];
+        port = parts[1];
+      }
+      return { host, port };
+    };
+
+    // Probe every connection in parallel
+    const probes = connections.map(async (conn) => {
+      const { host, port } = extractHostPort(conn);
+      const opts = {
+        id: conn.id, type: conn.type, host, port,
+        database: conn.database,
+        username: conn.username,
+        password: conn.password,
+      };
+
+      try {
+        if (conn.id === savedActiveId) {
+          // Last-active → establish persistent pool via `connect`
+          const result = await window.akatsuki.kawaiidb.connect(opts);
+          if (result.ok) {
+            return { ...conn, status: "online", lastUsed: "Just now", ...(result.version ? { version: result.version } : {}), _setActive: true };
+          }
+        } else {
+          // Others → lightweight probe via `testConnection`
+          const result = await window.akatsuki.kawaiidb.testConnection(opts);
+          if (result.ok) {
+            return { ...conn, status: "online" };
+          }
+        }
+      } catch {
+        // unreachable — mark offline
+      }
+      return { ...conn, status: "offline" };
+    });
+
+    Promise.all(probes).then((results) => {
+      setConnections(results.map(({ _setActive, ...c }) => c));
+      const active = results.find((r) => r._setActive);
+      if (active) {
+        const { _setActive, ...cleaned } = active;
+        setActiveConnection(cleaned);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — runs once on mount
+
   // Navigator state
   const [navigatorView, setNavigatorView] = useState("editor");
   const [activeTable, setActiveTable] = useState(null);
+
+  // Cross-screen state: AI Analyze initial SQL (set by History, consumed by AI Analyze)
+  const [aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL] = useState(null);
 
   // Query state
   const [sqlTabs, setSqlTabs] = useState([
@@ -247,6 +370,8 @@ function KawaiiApp({ initialTab, onNavigate }) {
       addSqlTab,
       connections,
       setConnections,
+      aiAnalyzeInitialSQL,
+      setAiAnalyzeInitialSQL,
     }),
     [
       activeTab,
@@ -260,6 +385,7 @@ function KawaiiApp({ initialTab, onNavigate }) {
       activeSqlTab,
       addSqlTab,
       connections,
+      aiAnalyzeInitialSQL,
     ]
   );
 
@@ -339,6 +465,12 @@ function KawaiiApp({ initialTab, onNavigate }) {
               connections={connections}
               activeConnection={activeConnection}
               onSelect={setActiveConnection}
+              onConnect={(updated) => {
+                setConnections(prev => prev.map(c =>
+                  c.id === updated.id ? updated : c
+                ));
+                setActiveConnection(updated);
+              }}
             />
           </div>
         )}

@@ -141,13 +141,25 @@ function ConnectionCard({ conn, isActive, onConnect, onDisconnect, onEdit, onDel
       <div style={{ padding: "0 14px 12px", display: "flex", gap: 8 }}>
         {isOnline ? (
           isActive ? (
-            <Btn
-              variant="ghost"
-              onClick={() => onDisconnect(conn)}
-              style={{ flex: 1, color: T.red, border: `1px solid ${T.red}40` }}
-            >
-              Disconnect
-            </Btn>
+            <>
+              <Btn
+                variant="success"
+                onClick={() => onConnect(conn)}
+                style={{
+                  flex: 1,
+                  background: `${T.teal}18`, border: `1px solid ${T.teal}40`, color: T.teal,
+                }}
+              >
+                Open
+              </Btn>
+              <Btn
+                variant="ghost"
+                onClick={() => onDisconnect(conn)}
+                style={{ color: T.red, border: `1px solid ${T.red}40` }}
+              >
+                Disconnect
+              </Btn>
+            </>
           ) : (
             <Btn
               variant="success"
@@ -235,10 +247,15 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
   const [selectedDbType, setSelectedDbType] = useState(editConn?.type || "mysql");
   const [formData, setFormData] = useState(() => {
     if (editConn) {
+      // Backward-compat: old saves merged host+port ("127.0.0.1:5432") — split them apart
+      const rawHost = editConn.host || "";
+      const hasEmbeddedPort = rawHost.includes(":") && !rawHost.startsWith("[");
+      const hostOnly = hasEmbeddedPort ? rawHost.split(":")[0] : rawHost;
+      const embeddedPort = hasEmbeddedPort ? rawHost.split(":")[1] : null;
       return {
         name: editConn.name || "",
-        host: editConn.host || "",
-        port: editConn.port || String(DB_TYPES[editConn.type]?.defaultPort || ""),
+        host: hostOnly,
+        port: editConn.port || embeddedPort || String(DB_TYPES[editConn.type]?.defaultPort || ""),
         database: editConn.database || "",
         username: editConn.username || "",
         password: editConn.password || "",
@@ -343,18 +360,22 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
     }
   };
 
-  // Build connection URL
+  // Build connection URL — includes password, correct host:port (no duplication)
   const connUrl = useMemo(() => {
     const db = DB_TYPES[selectedDbType];
     if (!db) return "";
     const host = formData.host || "localhost";
-    const port = formData.port || (db.defaultPort || "");
-    const user = formData.username || "root";
+    const port = formData.port || String(db.defaultPort || "");
+    const user = encodeURIComponent(formData.username || "root");
+    const pass = formData.password ? `:${encodeURIComponent(formData.password)}` : "";
     const dbName = formData.database || "mydb";
+    const portStr = port ? `:${port}` : "";
     if (selectedDbType === "sqlite") return `sqlite:///${formData.host || "~/database.db"}`;
-    if (selectedDbType === "mongodb") return `mongodb://${user}@${host}:${port}/${dbName}`;
-    return `${selectedDbType}://${user}@${host}${port ? `:${port}` : ""}/${dbName}`;
-  }, [selectedDbType, formData.host, formData.port, formData.username, formData.database]);
+    if (selectedDbType === "redis") return `redis://${user}${pass}@${host}${portStr}/${dbName}`;
+    if (selectedDbType === "mongodb") return `mongodb://${user}${pass}@${host}${portStr}/${dbName}`;
+    if (selectedDbType === "sqlserver") return `sqlserver://${user}${pass}@${host}${portStr};database=${dbName}`;
+    return `${selectedDbType}://${user}${pass}@${host}${portStr}/${dbName}`;
+  }, [selectedDbType, formData.host, formData.port, formData.username, formData.password, formData.database]);
 
   // Validate form — returns error message or null
   const validate = () => {
@@ -375,7 +396,7 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
       name: formData.name.trim(),
       type: selectedDbType,
       version,
-      host: formData.host.trim() + (formData.port && selectedDbType !== "sqlite" ? `:${formData.port}` : ""),
+      host: formData.host.trim(),   // plain hostname only — port stored separately
       database: formData.database.trim(),
       status: editConn?.status || "offline",
       favorite: editConn?.favorite || false,
@@ -408,7 +429,9 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
     setTestLoading(true);
     setTestResult(null);
     try {
-      const result = await window.akatsuki.kawaiidb.testConnection({
+      const conn = buildConnection();
+      const result = await window.akatsuki.kawaiidb.connect({
+        id: conn.id,
         type: selectedDbType,
         host: formData.host.trim(),
         port: formData.port || null,
@@ -417,11 +440,11 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
         password: formData.password,
       });
       if (result.ok) {
-        const conn = buildConnection();
         conn.status = "online";
+        if (result.version) conn.version = result.version;
         onSaveAndGo(conn);
       } else {
-        setTestResult({ type: "error", msg: result.msg });
+        setTestResult({ type: "error", msg: result.msg || "Connection failed" });
       }
     } catch (e) {
       setTestResult({ type: "error", msg: e.message || "Connection failed" });
@@ -995,7 +1018,14 @@ export default function ScreenConnections() {
   const [connectingId, setConnectingId] = useState(null);
 
   const handleConnect = async (conn) => {
+    // If this is already the active connection (connected in this session) — just navigate
+    if (activeConnection && activeConnection.id === conn.id && conn.status === "online") {
+      setActiveTab("navigator");
+      return;
+    }
+
     setConnectingId(conn.id);
+    setConnectError(null); // Clear previous errors
     try {
       // Parse host and port from stored host field (e.g. "localhost:5432")
       let host = conn.host || "";
@@ -1005,7 +1035,8 @@ export default function ScreenConnections() {
         host = parts[0];
         port = parts[1];
       }
-      const result = await window.akatsuki.kawaiidb.testConnection({
+      const result = await window.akatsuki.kawaiidb.connect({
+        id: conn.id,
         type: conn.type,
         host,
         port,
@@ -1014,17 +1045,19 @@ export default function ScreenConnections() {
         password: conn.password,
       });
       if (result.ok) {
+        const version = result.version || null;
+        const updated = { ...conn, status: "online", lastUsed: "Just now", ...(version ? { version } : {}) };
         setConnections(prev => prev.map(c =>
-          c.id === conn.id ? { ...c, status: "online", lastUsed: "Just now" } : c
+          c.id === conn.id ? { ...c, status: "online", lastUsed: "Just now", ...(version ? { version } : {}) } : c
         ));
-        setActiveConnection({ ...conn, status: "online", lastUsed: "Just now" });
+        setActiveConnection(updated);
         setActiveTab("navigator");
       } else {
         // Connection failed — update status to offline and show error
         setConnections(prev => prev.map(c =>
           c.id === conn.id ? { ...c, status: "offline" } : c
         ));
-        setConnectError({ id: conn.id, msg: result.msg });
+        setConnectError({ id: conn.id, msg: result.msg || "Connection failed" });
       }
     } catch (e) {
       setConnectError({ id: conn.id, msg: e.message || "Connection failed" });
@@ -1035,7 +1068,9 @@ export default function ScreenConnections() {
 
   const [connectError, setConnectError] = useState(null);
 
-  const handleDisconnect = (conn) => {
+  const handleDisconnect = async (conn) => {
+    // Close persistent connection pool
+    try { await window.akatsuki.kawaiidb.disconnect({ id: conn.id }); } catch {}
     setConnections(prev => prev.map(c =>
       c.id === conn.id ? { ...c, status: "offline" } : c
     ));
@@ -1235,6 +1270,13 @@ export default function ScreenConnections() {
             <span style={{ fontSize: 11, color: T.txt2, fontFamily: T.fontUI }}>
               {filtered.length} connection{filtered.length !== 1 ? "s" : ""}
             </span>
+            <Btn
+              variant="primary"
+              onClick={() => setShowNewConnectionModal(true)}
+              style={{ background: T.teal, color: T.bg0, padding: "0 12px", height: 26, fontSize: 11 }}
+            >
+              + New Connection
+            </Btn>
           </PanelHeader>
 
           {/* Card Grid */}

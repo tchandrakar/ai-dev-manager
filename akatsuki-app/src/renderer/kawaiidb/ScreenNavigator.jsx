@@ -560,7 +560,7 @@ function QueryResultRow({ row, columns, rowIndex }) {
 
 // ── SQL Editor Sub-View ─────────────────────────────────────────────────────
 function SQLEditorView() {
-  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab } = useKawaii();
+  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab, activeConnection } = useKawaii();
 
   // Per-tab SQL content storage
   const [tabContents, setTabContents] = useState(() => {
@@ -658,91 +658,68 @@ function SQLEditorView() {
     setRenamingTab(null);
   }, []);
 
-  // Simple SQL parser for run
-  const handleRunQuery = useCallback(() => {
+  // Execute SQL via real IPC
+  const handleRunQuery = useCallback(async () => {
     const sql = (tabContents[activeSqlTab] || "").trim();
     if (!sql) {
       setTabResults((prev) => ({
         ...prev,
-        [activeSqlTab]: {
-          status: "error",
-          message: "No SQL to execute",
-          columns: [],
-          rows: [],
-          time: 0,
-        },
+        [activeSqlTab]: { status: "error", message: "No SQL to execute", columns: [], rows: [], time: 0 },
       }));
       return;
     }
 
-    // Basic validation
-    const upper = sql.toUpperCase();
-    const hasUnclosedString = (sql.split("'").length - 1) % 2 !== 0;
-    if (hasUnclosedString) {
+    if (!activeConnection) {
       setTabResults((prev) => ({
         ...prev,
-        [activeSqlTab]: {
-          status: "error",
-          message: "Syntax error: unclosed string literal",
-          columns: [],
-          rows: [],
-          time: 0,
-        },
+        [activeSqlTab]: { status: "error", message: "No active connection. Select a connection first.", columns: [], rows: [], time: 0 },
       }));
       return;
     }
 
-    // Check for basic statement type
-    if (upper.startsWith("SELECT")) {
+    // Show loading
+    setTabResults((prev) => ({
+      ...prev,
+      [activeSqlTab]: { status: "loading", message: "Executing...", columns: [], rows: [], time: 0 },
+    }));
+
+    try {
+      const result = await window.akatsuki.kawaiidb.executeQuery({
+        connectionId: activeConnection.id,
+        sql,
+      });
+
+      if (result.error) {
+        setTabResults((prev) => ({
+          ...prev,
+          [activeSqlTab]: {
+            status: "error",
+            message: result.error,
+            columns: [],
+            rows: [],
+            time: result.duration || 0,
+          },
+        }));
+      } else {
+        const columns = result.columns || (result.rows?.length > 0 ? Object.keys(result.rows[0]) : []);
+        setTabResults((prev) => ({
+          ...prev,
+          [activeSqlTab]: {
+            status: "success",
+            message: result.message || `${result.rowCount ?? result.rows?.length ?? 0} rows returned in ${result.duration}ms`,
+            columns,
+            rows: result.rows || [],
+            time: (result.duration || 0) / 1000,
+          },
+        }));
+      }
+    } catch (e) {
       setTabResults((prev) => ({
         ...prev,
-        [activeSqlTab]: {
-          status: "success",
-          message: "Query executed successfully. No real database connected -- results would appear here with a live connection.",
-          columns: [],
-          rows: [],
-          time: 0.001,
-        },
-      }));
-    } else if (
-      upper.startsWith("INSERT") ||
-      upper.startsWith("UPDATE") ||
-      upper.startsWith("DELETE")
-    ) {
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          status: "success",
-          message: `Statement executed successfully (no database connected).`,
-          columns: [],
-          rows: [],
-          time: 0.001,
-        },
-      }));
-    } else if (upper.startsWith("CREATE") || upper.startsWith("ALTER") || upper.startsWith("DROP")) {
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          status: "success",
-          message: `DDL statement parsed successfully (no database connected).`,
-          columns: [],
-          rows: [],
-          time: 0.001,
-        },
-      }));
-    } else {
-      setTabResults((prev) => ({
-        ...prev,
-        [activeSqlTab]: {
-          status: "success",
-          message: "Query executed (no database connected).",
-          columns: [],
-          rows: [],
-          time: 0.001,
-        },
+        [activeSqlTab]: { status: "error", message: e.message || "Query execution failed", columns: [], rows: [], time: 0 },
       }));
     }
-  }, [activeSqlTab, tabContents]);
+  }, [activeSqlTab, tabContents, activeConnection]);
 
   // Keyboard shortcut
   const handleKeyDown = useCallback(
@@ -1423,7 +1400,10 @@ function TableDataView({ activeTable, schemaTables }) {
   const [newColType, setNewColType] = useState("VARCHAR(255)");
   const newColRef = useRef(null);
 
-  // Reset state when table changes
+  const [totalRowCount, setTotalRowCount] = useState(0);
+  const [tableLoading, setTableLoading] = useState(false);
+
+  // Fetch real table data when table changes or pagination changes
   useEffect(() => {
     setColumns([]);
     setRows([]);
@@ -1431,8 +1411,37 @@ function TableDataView({ activeTable, schemaTables }) {
     setEditingCell(null);
     setSortColumn(null);
     setFilterText("");
-    setPage(1);
-  }, [activeTable]);
+    setTotalRowCount(0);
+
+    if (!activeTable || !activeConnection) return;
+
+    let cancelled = false;
+    (async () => {
+      setTableLoading(true);
+      try {
+        const result = await window.akatsuki.kawaiidb.fetchTableData({
+          connectionId: activeConnection.id,
+          tableName: activeTable,
+          page: 1,
+          pageSize: rowsPerPage,
+        });
+        if (cancelled) return;
+        if (result && !result.error) {
+          if (result.columns) {
+            // Convert column names to objects if they're strings
+            const cols = Array.isArray(result.columns)
+              ? result.columns.map((c) => typeof c === "string" ? { name: c, type: "TEXT" } : c)
+              : [];
+            setColumns(cols);
+          }
+          if (result.rows) setRows(result.rows);
+          if (result.totalRows != null) setTotalRowCount(result.totalRows);
+        }
+      } catch {}
+      if (!cancelled) setTableLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [activeTable, activeConnection?.id]);
 
   const toggleRow = useCallback((rowIdx) => {
     setSelectedRows((prev) => {
@@ -2426,6 +2435,33 @@ function ERDiagramView({ schemaTables }) {
     });
   }, [zoom, panOffset, tablePositions, relationships, getFieldY]);
 
+  // Omnidirectional scroll via trackpad / mouse wheel
+  const handleWheel = useCallback(
+    (e) => {
+      e.preventDefault();
+      // If pinch-to-zoom (ctrlKey on trackpad), adjust zoom
+      if (e.ctrlKey || e.metaKey) {
+        const delta = -e.deltaY * 0.005;
+        setZoom((z) => Math.min(2, Math.max(0.15, z + delta)));
+      } else {
+        // Normal scroll — pan the canvas
+        setPanOffset((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY,
+        }));
+      }
+    },
+    []
+  );
+
+  // Attach wheel listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
   const handleFitToScreen = useCallback(() => {
     setPanOffset({ x: 0, y: 0 });
     setZoom(1);
@@ -2764,19 +2800,39 @@ function ScreenNavigator() {
     () => new Set(["connection", "db-main", "folder-tables"])
   );
 
-  // Schema state: user-managed lists of tables/views/SPs/functions
+  // Schema state: loaded from real database via IPC
   const [schemaTables, setSchemaTables] = useState([]);
   const [schemaViews, setSchemaViews] = useState([]);
   const [schemaSPs, setSchemaSPs] = useState([]);
   const [schemaFunctions, setSchemaFunctions] = useState([]);
+  const [schemaLoading, setSchemaLoading] = useState(false);
 
-  // Reset schema when connection changes
+  // Fetch real schema when connection changes
   useEffect(() => {
     setSchemaTables([]);
     setSchemaViews([]);
     setSchemaSPs([]);
     setSchemaFunctions([]);
     setActiveTable(null);
+
+    if (!activeConnection || activeConnection.status !== "online") return;
+
+    let cancelled = false;
+    (async () => {
+      setSchemaLoading(true);
+      try {
+        const schema = await window.akatsuki.kawaiidb.fetchSchema({ connectionId: activeConnection.id });
+        if (cancelled) return;
+        if (schema && !schema.error) {
+          if (schema.tables) setSchemaTables(schema.tables);
+          if (schema.views) setSchemaViews(schema.views);
+          if (schema.storedProcedures) setSchemaSPs(schema.storedProcedures);
+          if (schema.functions) setSchemaFunctions(schema.functions);
+        }
+      } catch {}
+      if (!cancelled) setSchemaLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [activeConnection?.id, setActiveTable]);
 
   const toggleNode = useCallback((key) => {
