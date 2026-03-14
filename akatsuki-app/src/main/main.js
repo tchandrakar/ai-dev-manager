@@ -280,12 +280,13 @@ function _createCommandTunnel(command) {
       reject(new Error("Tunnel command timed out waiting for port to become ready"));
     }, 30000);
 
-    // Spawn the command as a shell process
+    // Spawn the command as a shell process (stdin must be a pipe for gcloud/ssh)
     const proc = spawn("sh", ["-c", command], {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
       detached: false,
     });
+    proc.stdin.end();
 
     let stderr = "";
     proc.stderr.on("data", (d) => { stderr += d.toString(); });
