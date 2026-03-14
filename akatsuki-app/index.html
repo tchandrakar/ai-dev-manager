@@ -36,7 +36,53 @@
           ai:      { review: noop, chat: noop },
           git:     { fetchPR: noop, fetchDiff: noop, postReview: noop, testAuth: () => Promise.resolve({ ok: true, username: "demo-user", name: "Demo" }), bitbucketWorkspaces: () => Promise.resolve({ workspaces: [{ slug: "my-workspace", name: "My Workspace" }, { slug: "demo-org", name: "Demo Org" }] }) },
           shell:   { openExternal: (url) => { window.open(url, "_blank"); return Promise.resolve({}); } },
-          kawaiidb: { testConnection: () => Promise.resolve({ ok: false, msg: "Connection testing not available in browser preview" }) },
+          kawaiidb: {
+            testConnection: (opts) => new Promise(resolve => setTimeout(() => resolve({ ok: true, msg: `Connected — ${(opts?.type || "database").replace(/^\w/, c => c.toUpperCase())} (browser preview)` }), 600)),
+            connect: (opts) => new Promise(resolve => setTimeout(() => resolve({ ok: true, version: `${(opts?.type || "DB").replace(/^\w/, c => c.toUpperCase())} (browser mock)` }), 400)),
+            disconnect: () => Promise.resolve({ ok: true }),
+            executeQuery: (opts) => new Promise(resolve => setTimeout(() => {
+              const sql = (opts?.sql || "").trim().toUpperCase();
+              if (sql.startsWith("SELECT")) {
+                resolve({ columns: ["id","name","email","created_at"], rows: [
+                  {id:1,name:"Alice Johnson",email:"alice@example.com",created_at:"2024-01-15T10:30:00Z"},
+                  {id:2,name:"Bob Smith",email:"bob@example.com",created_at:"2024-02-03T14:22:00Z"},
+                  {id:3,name:"Carol Chen",email:"carol@example.com",created_at:"2024-03-10T09:15:00Z"},
+                  {id:4,name:"David Park",email:"david@example.com",created_at:"2024-04-22T16:45:00Z"},
+                  {id:5,name:"Eva Martinez",email:"eva@example.com",created_at:"2024-05-08T11:00:00Z"},
+                ], rowCount:5, duration: Math.floor(Math.random()*50)+5 });
+              } else { resolve({ columns:[], rows:[], rowCount:1, duration:Math.floor(Math.random()*20)+2, message:"1 row affected" }); }
+            }, 300)),
+            fetchSchema: () => new Promise(resolve => setTimeout(() => resolve({
+              tables: [
+                {name:"users",rowCount:1247,columns:[{name:"id",type:"INT",pk:true},{name:"username",type:"VARCHAR(50)"},{name:"email",type:"VARCHAR(255)"},{name:"status",type:"VARCHAR(20)"},{name:"created_at",type:"TIMESTAMP"}]},
+                {name:"orders",rowCount:8432,columns:[{name:"id",type:"INT",pk:true},{name:"user_id",type:"INT",fk:true,fkTable:"users",fkColumn:"id"},{name:"total",type:"DECIMAL(10,2)"},{name:"status",type:"VARCHAR(20)"},{name:"created_at",type:"TIMESTAMP"}]},
+                {name:"products",rowCount:356,columns:[{name:"id",type:"INT",pk:true},{name:"name",type:"VARCHAR(200)"},{name:"price",type:"DECIMAL(10,2)"},{name:"category_id",type:"INT",fk:true,fkTable:"categories",fkColumn:"id"},{name:"stock",type:"INT"}]},
+                {name:"categories",rowCount:24,columns:[{name:"id",type:"INT",pk:true},{name:"name",type:"VARCHAR(100)"},{name:"parent_id",type:"INT"}]},
+                {name:"order_items",rowCount:21540,columns:[{name:"id",type:"INT",pk:true},{name:"order_id",type:"INT",fk:true,fkTable:"orders",fkColumn:"id"},{name:"product_id",type:"INT",fk:true,fkTable:"products",fkColumn:"id"},{name:"quantity",type:"INT"},{name:"price",type:"DECIMAL(10,2)"}]},
+                {name:"payments",rowCount:7890,columns:[{name:"id",type:"INT",pk:true},{name:"order_id",type:"INT",fk:true,fkTable:"orders",fkColumn:"id"},{name:"amount",type:"DECIMAL(10,2)"},{name:"method",type:"VARCHAR(50)"},{name:"paid_at",type:"TIMESTAMP"}]},
+              ],
+              views:["v_active_orders","v_revenue_summary"],
+              storedProcedures:["sp_process_order","sp_daily_report"],
+              functions:["fn_calc_tax","fn_format_currency"],
+            }), 500)),
+            fetchTableData: (opts) => new Promise(resolve => setTimeout(() => {
+              const rows = Array.from({length:10},(_,i) => ({id:((opts?.page||1)-1)*10+i+1,name:`Row ${((opts?.page||1)-1)*10+i+1}`,value:Math.floor(Math.random()*1000),created_at:new Date(Date.now()-Math.random()*1e10).toISOString()}));
+              resolve({columns:["id","name","value","created_at"],rows,totalRows:100,page:opts?.page||1,pageSize:opts?.pageSize||25});
+            }, 300)),
+            getServerInfo: () => new Promise(resolve => setTimeout(() => resolve({
+              version:"PostgreSQL 16.1 (mock)",uptime:"47d 12h 33m",
+              serverInfo:[{label:"Server",value:"PostgreSQL 16.1 (mock)"},{label:"Database",value:"ecommerce_prod"},{label:"Uptime",value:"47d 12h 33m"},{label:"Database Size",value:"342.7 MB"},{label:"Active Connections",value:"24 / 100",progress:24,progressColor:"#3DEFE9"},{label:"Buffer Pool",value:"68% used",progress:68,progressColor:"#3FB950"},{label:"Slow Queries",value:"12"},{label:"Total Queries",value:"1,247,832"}],
+              metrics:{queriesPerSec:1247,avgQueryTime:23,diskUsed:34.7,diskTotal:100},
+            }), 400)),
+            getActiveQueries: () => new Promise(resolve => setTimeout(() => resolve({queries:[
+              {pid:12847,user:"app_user",db:"ecommerce_prod",query:"SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at",duration:"2s",state:"active"},
+              {pid:12901,user:"analytics",db:"ecommerce_prod",query:"SELECT DATE(created_at), SUM(total) FROM orders GROUP BY 1",duration:"8s",state:"active"},
+            ]}), 200)),
+            explainQuery: () => new Promise(resolve => setTimeout(() => resolve({plan:[
+              {table:"orders",type:"ALL",rows:"~8432",key:null,extra:"Using where; Using filesort"},
+              {table:"users",type:"ref",rows:"~1",key:"PRIMARY",extra:"Using index"},
+            ]}), 300)),
+          },
           shinra:  { readDir: () => Promise.resolve({ entries: [] }), readFile: () => Promise.resolve({ content: "", size: 0 }), writeFile: () => Promise.resolve({ ok: true }), fileStat: () => Promise.resolve({ size: 0, isDir: false, isFile: true }), searchFiles: () => Promise.resolve({ results: [] }), runCommand: () => Promise.resolve({ stdout: "", stderr: "", exitCode: 0 }), selectFolder: () => Promise.resolve({ canceled: true }), shellCreate: () => Promise.resolve({ ok: true, pid: 0, shell: "/bin/zsh" }), shellWrite: () => Promise.resolve({ ok: true }), shellDestroy: () => Promise.resolve({ ok: true }), onShellStdout: () => {}, onShellStderr: () => {}, onShellExit: () => {}, removeShellListeners: () => {} },
         };
       }

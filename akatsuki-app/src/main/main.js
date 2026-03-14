@@ -212,56 +212,977 @@ ipcMain.handle("shell:open-external", (_, url) => { shell.openExternal(url); ret
 ipcMain.handle("workdir:stats", (_, dir) => memGetStats(dir));
 ipcMain.handle("workdir:clear", (_, dir) => memClearAll(dir));
 
+// ── KawaiiDB persistent connection pool ──────────────────────────────────────
+const _dbPools = new Map(); // connectionId -> { type, client, meta }
+
+function _dbQuoteId(type, name) {
+  if (type === "mysql" || type === "mariadb") return "`" + name.replace(/`/g, "``") + "`";
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
 // ── KawaiiDB connection test ──────────────────────────────────────────────────
 ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, database, username, password }) => {
-  const net = require("net");
+  const h = (host || "localhost").trim();
+  const p = parseInt(port, 10) || 0;
+  const db = (database || "").trim();
+  const user = (username || "").trim();
+  const pass = password || "";
+  const TIMEOUT = 8000;
 
-  // SQLite: just check if the file exists
+  // ── SQLite ──────────────────────────────────────────────────────────────────
   if (type === "sqlite") {
-    const dbPath = (host || database || "").replace(/^~/, os.homedir());
+    const dbPath = (h || db || "").replace(/^~/, os.homedir());
     try {
-      if (fs.existsSync(dbPath)) return { ok: true, msg: "SQLite file exists and is accessible" };
+      if (fs.existsSync(dbPath)) return { ok: true, msg: "SQLite file found and accessible" };
       return { ok: false, msg: `File not found: ${dbPath}` };
     } catch (e) { return { ok: false, msg: e.message }; }
   }
 
-  // For all other DB types: attempt a TCP socket connection to host:port
-  const p = parseInt(port, 10);
-  if (!host || !p) return { ok: false, msg: "Host and port are required" };
+  // ── PostgreSQL ──────────────────────────────────────────────────────────────
+  if (type === "postgresql") {
+    const { Client } = require("pg");
+    const client = new Client({
+      host: h, port: p || 5432,
+      database: db || "postgres",
+      user: user || "postgres",
+      password: pass,
+      connectionTimeoutMillis: TIMEOUT,
+      ssl: false,
+    });
+    try {
+      await client.connect();
+      const res = await client.query("SELECT version()");
+      await client.end();
+      const ver = res.rows[0]?.version?.split(" ").slice(0, 2).join(" ") || "PostgreSQL";
+      return { ok: true, msg: `Connected — ${ver}` };
+    } catch (e) {
+      try { await client.end(); } catch {}
+      return { ok: false, msg: e.message };
+    }
+  }
 
+  // ── MySQL / MariaDB ─────────────────────────────────────────────────────────
+  if (type === "mysql" || type === "mariadb") {
+    const mysql = require("mysql2/promise");
+    let conn;
+    try {
+      conn = await mysql.createConnection({
+        host: h, port: p || 3306,
+        database: db || undefined,
+        user: user || "root",
+        password: pass,
+        connectTimeout: TIMEOUT,
+      });
+      const [[row]] = await conn.query("SELECT VERSION() as v");
+      await conn.end();
+      return { ok: true, msg: `Connected — ${type === "mariadb" ? "MariaDB" : "MySQL"} ${row.v}` };
+    } catch (e) {
+      try { if (conn) await conn.end(); } catch {}
+      return { ok: false, msg: e.message };
+    }
+  }
+
+  // ── MongoDB ─────────────────────────────────────────────────────────────────
+  if (type === "mongodb") {
+    const { MongoClient } = require("mongodb");
+    const uri = user
+      ? `mongodb://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${h}:${p || 27017}/${db}`
+      : `mongodb://${h}:${p || 27017}/${db}`;
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: TIMEOUT, connectTimeoutMS: TIMEOUT });
+    try {
+      await client.connect();
+      const info = await client.db("admin").command({ serverStatus: 1, repl: 0, metrics: 0, locks: 0 });
+      await client.close();
+      return { ok: true, msg: `Connected — MongoDB ${info.version}` };
+    } catch (e) {
+      try { await client.close(); } catch {}
+      return { ok: false, msg: e.message };
+    }
+  }
+
+  // ── Redis ───────────────────────────────────────────────────────────────────
+  if (type === "redis") {
+    const Redis = require("ioredis");
+    const client = new Redis({
+      host: h, port: p || 6379,
+      username: user || undefined,
+      password: pass || undefined,
+      db: parseInt(db, 10) || 0,
+      connectTimeout: TIMEOUT,
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+    try {
+      await client.connect();
+      const pong = await client.ping();
+      const info = await client.info("server");
+      const verMatch = info.match(/redis_version:([\d.]+)/);
+      await client.quit();
+      return { ok: true, msg: `Connected — Redis ${verMatch ? verMatch[1] : ""} (${pong})` };
+    } catch (e) {
+      try { client.disconnect(); } catch {}
+      return { ok: false, msg: e.message };
+    }
+  }
+
+  // ── SQL Server (MSSQL) ──────────────────────────────────────────────────────
+  if (type === "sqlserver") {
+    const mssql = require("mssql");
+    const cfg = {
+      server: h,
+      port: p || 1433,
+      database: db || "master",
+      user: user || "sa",
+      password: pass,
+      options: { trustServerCertificate: true, connectTimeout: TIMEOUT },
+    };
+    let pool;
+    try {
+      pool = await mssql.connect(cfg);
+      const res = await pool.request().query("SELECT @@VERSION AS v");
+      const ver = res.recordset[0]?.v?.split("\n")[0] || "SQL Server";
+      await pool.close();
+      return { ok: true, msg: `Connected — ${ver}` };
+    } catch (e) {
+      try { if (pool) await pool.close(); } catch {}
+      mssql.close();
+      return { ok: false, msg: e.message };
+    }
+  }
+
+  // ── Oracle ──────────────────────────────────────────────────────────────────
+  if (type === "oracle") {
+    // oracledb requires thick-mode native libs; attempt dynamic require
+    try {
+      const oracledb = require("oracledb");
+      let conn;
+      try {
+        conn = await oracledb.getConnection({
+          user: user || "system",
+          password: pass,
+          connectString: `${h}:${p || 1521}/${db || "ORCL"}`,
+          connectTimeout: Math.floor(TIMEOUT / 1000),
+        });
+        const res = await conn.execute("SELECT banner FROM v$version WHERE ROWNUM = 1");
+        const ver = res.rows?.[0]?.[0] || "Oracle DB";
+        await conn.close();
+        return { ok: true, msg: `Connected — ${ver}` };
+      } catch (e) {
+        try { if (conn) await conn.close(); } catch {}
+        return { ok: false, msg: e.message };
+      }
+    } catch {
+      // oracledb not installed — fall back to TCP ping
+    }
+  }
+
+  // ── Generic TCP fallback (Oracle without driver, or unknown types) ──────────
+  const net = require("net");
+  if (!h || !p) return { ok: false, msg: "Host and port are required" };
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    const timeout = 5000;
     let resolved = false;
-
-    const done = (result) => {
-      if (resolved) return;
-      resolved = true;
-      socket.destroy();
-      resolve(result);
-    };
-
-    socket.setTimeout(timeout);
-    socket.on("connect", () => {
-      done({ ok: true, msg: `Connected to ${host}:${p}` });
-    });
-    socket.on("timeout", () => {
-      done({ ok: false, msg: `Connection timed out after ${timeout / 1000}s — is the server running?` });
-    });
+    const done = (r) => { if (resolved) return; resolved = true; socket.destroy(); resolve(r); };
+    socket.setTimeout(TIMEOUT);
+    socket.on("connect", () => done({ ok: true, msg: `TCP port ${p} reachable on ${h}` }));
+    socket.on("timeout", () => done({ ok: false, msg: `Timed out connecting to ${h}:${p}` }));
     socket.on("error", (err) => {
-      if (err.code === "ECONNREFUSED") {
-        done({ ok: false, msg: `Connection refused at ${host}:${p} — is the database server running?` });
-      } else if (err.code === "ENOTFOUND") {
-        done({ ok: false, msg: `Host not found: ${host}` });
-      } else if (err.code === "EHOSTUNREACH") {
-        done({ ok: false, msg: `Host unreachable: ${host}` });
-      } else {
-        done({ ok: false, msg: `Connection failed: ${err.message}` });
-      }
+      const msgs = { ECONNREFUSED: `Connection refused at ${h}:${p}`, ENOTFOUND: `Host not found: ${h}`, EHOSTUNREACH: `Host unreachable: ${h}` };
+      done({ ok: false, msg: msgs[err.code] || err.message });
     });
-
-    socket.connect(p, host);
+    socket.connect(p, h);
   });
+});
+
+// ── KawaiiDB: persistent connect ──────────────────────────────────────────────
+ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, username, password }) => {
+  const h = (host || "localhost").trim();
+  const p = parseInt(port, 10) || 0;
+  const db = (database || "").trim();
+  const user = (username || "").trim();
+  const pass = password || "";
+  const TIMEOUT = 8000;
+
+  // Close existing if any
+  if (_dbPools.has(id)) {
+    try {
+      const old = _dbPools.get(id);
+      if (old.type === "sqlite") old.client.close();
+      else if (old.type === "mongodb") await old.client.close();
+      else if (old.type === "redis") old.client.disconnect();
+      else if (old.client.end) await old.client.end();
+      else if (old.client.close) await old.client.close();
+    } catch {}
+    _dbPools.delete(id);
+  }
+
+  try {
+    if (type === "sqlite") {
+      const dbPath = (h || db || "").replace(/^~/, os.homedir());
+      const Database = require("better-sqlite3");
+      const client = new Database(dbPath);
+      client.pragma("journal_mode = WAL");
+      const ver = client.prepare("SELECT sqlite_version() AS v").get();
+      _dbPools.set(id, { type, client, meta: { version: `SQLite ${ver.v}`, database: path.basename(dbPath) } });
+      return { ok: true, version: `SQLite ${ver.v}` };
+    }
+
+    if (type === "postgresql") {
+      const { Pool } = require("pg");
+      const pool = new Pool({
+        host: h, port: p || 5432,
+        database: db || "postgres",
+        user: user || "postgres",
+        password: pass,
+        connectionTimeoutMillis: TIMEOUT,
+        max: 5,
+        ssl: false,
+      });
+      const res = await pool.query("SELECT version()");
+      const ver = res.rows[0]?.version?.split(" ").slice(0, 2).join(" ") || "PostgreSQL";
+      _dbPools.set(id, { type, client: pool, meta: { version: ver, database: db || "postgres" } });
+      return { ok: true, version: ver };
+    }
+
+    if (type === "mysql" || type === "mariadb") {
+      const mysql = require("mysql2/promise");
+      const pool = await mysql.createPool({
+        host: h, port: p || 3306,
+        database: db || undefined,
+        user: user || "root",
+        password: pass,
+        connectTimeout: TIMEOUT,
+        connectionLimit: 5,
+      });
+      const [[row]] = await pool.query("SELECT VERSION() as v");
+      const ver = `${type === "mariadb" ? "MariaDB" : "MySQL"} ${row.v}`;
+      _dbPools.set(id, { type, client: pool, meta: { version: ver, database: db } });
+      return { ok: true, version: ver };
+    }
+
+    if (type === "mongodb") {
+      const { MongoClient } = require("mongodb");
+      const uri = user
+        ? `mongodb://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${h}:${p || 27017}/${db}`
+        : `mongodb://${h}:${p || 27017}/${db}`;
+      const client = new MongoClient(uri, { serverSelectionTimeoutMS: TIMEOUT, connectTimeoutMS: TIMEOUT });
+      await client.connect();
+      const info = await client.db("admin").command({ serverStatus: 1, repl: 0, metrics: 0, locks: 0 });
+      const ver = `MongoDB ${info.version}`;
+      _dbPools.set(id, { type, client, meta: { version: ver, database: db || "test" } });
+      return { ok: true, version: ver };
+    }
+
+    if (type === "redis") {
+      const Redis = require("ioredis");
+      const client = new Redis({
+        host: h, port: p || 6379,
+        username: user || undefined,
+        password: pass || undefined,
+        db: parseInt(db, 10) || 0,
+        connectTimeout: TIMEOUT,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+      });
+      await client.connect();
+      const info = await client.info("server");
+      const verMatch = info.match(/redis_version:([\d.]+)/);
+      const ver = `Redis ${verMatch ? verMatch[1] : ""}`;
+      _dbPools.set(id, { type, client, meta: { version: ver, database: db || "0" } });
+      return { ok: true, version: ver };
+    }
+
+    if (type === "sqlserver") {
+      const mssql = require("mssql");
+      const cfg = {
+        server: h, port: p || 1433,
+        database: db || "master",
+        user: user || "sa",
+        password: pass,
+        options: { trustServerCertificate: true, connectTimeout: TIMEOUT },
+      };
+      const pool = await mssql.connect(cfg);
+      const res = await pool.request().query("SELECT @@VERSION AS v");
+      const ver = res.recordset[0]?.v?.split("\n")[0] || "SQL Server";
+      _dbPools.set(id, { type: "sqlserver", client: pool, meta: { version: ver, database: db || "master" } });
+      return { ok: true, version: ver };
+    }
+
+    return { ok: false, msg: `Unsupported database type: ${type}` };
+  } catch (e) {
+    return { ok: false, msg: e.message };
+  }
+});
+
+// ── KawaiiDB: disconnect ────────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:disconnect", async (_, { id }) => {
+  if (!_dbPools.has(id)) return { ok: true };
+  try {
+    const entry = _dbPools.get(id);
+    if (entry.type === "sqlite") entry.client.close();
+    else if (entry.type === "mongodb") await entry.client.close();
+    else if (entry.type === "redis") entry.client.disconnect();
+    else if (entry.client.end) await entry.client.end();
+    else if (entry.client.close) await entry.client.close();
+  } catch {}
+  _dbPools.delete(id);
+  return { ok: true };
+});
+
+// ── KawaiiDB: execute query ─────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:execute-query", async (_, { connectionId, sql }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { error: "No active connection. Please connect first.", duration: 0 };
+
+  const start = process.hrtime.bigint();
+
+  try {
+    if (entry.type === "postgresql") {
+      const res = await entry.client.query(sql);
+      const duration = Number(process.hrtime.bigint() - start) / 1e6;
+      if (res.rows && res.fields) {
+        const columns = res.fields.map((f) => f.name);
+        const rows = res.rows.map((r) => {
+          const obj = {};
+          for (const col of columns) {
+            let v = r[col];
+            if (v instanceof Date) v = v.toISOString();
+            else if (Buffer.isBuffer(v)) v = `<binary ${v.length}B>`;
+            else if (typeof v === "bigint") v = v.toString();
+            obj[col] = v;
+          }
+          return obj;
+        });
+        return { columns, rows, rowCount: res.rowCount, duration: Math.round(duration) };
+      }
+      return { columns: [], rows: [], rowCount: res.rowCount || 0, duration: Math.round(duration), message: `${res.command || "OK"}: ${res.rowCount ?? 0} rows affected` };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const [result, fields] = await entry.client.query(sql);
+      const duration = Number(process.hrtime.bigint() - start) / 1e6;
+      if (Array.isArray(result) && fields) {
+        const columns = fields.map((f) => f.name);
+        const rows = result.map((r) => {
+          const obj = {};
+          for (const col of columns) {
+            let v = r[col];
+            if (v instanceof Date) v = v.toISOString();
+            else if (Buffer.isBuffer(v)) v = `<binary ${v.length}B>`;
+            obj[col] = v;
+          }
+          return obj;
+        });
+        return { columns, rows, rowCount: result.length, duration: Math.round(duration) };
+      }
+      return { columns: [], rows: [], rowCount: result.affectedRows || 0, duration: Math.round(duration), message: `${result.affectedRows ?? 0} rows affected` };
+    }
+
+    if (entry.type === "sqlite") {
+      const trimmed = sql.trim();
+      const upper = trimmed.toUpperCase();
+      const duration_fn = () => Math.round(Number(process.hrtime.bigint() - start) / 1e6);
+      if (upper.startsWith("SELECT") || upper.startsWith("PRAGMA") || upper.startsWith("EXPLAIN") || upper.startsWith("WITH")) {
+        const stmt = entry.client.prepare(trimmed);
+        const rows = stmt.all();
+        const columns = rows.length > 0 ? Object.keys(rows[0]) : (stmt.columns ? stmt.columns().map((c) => c.name) : []);
+        return { columns, rows, rowCount: rows.length, duration: duration_fn() };
+      }
+      const info = entry.client.prepare(trimmed).run();
+      return { columns: [], rows: [], rowCount: info.changes, duration: duration_fn(), message: `${info.changes} rows affected` };
+    }
+
+    if (entry.type === "mongodb") {
+      // Basic command execution for MongoDB
+      const duration_fn = () => Math.round(Number(process.hrtime.bigint() - start) / 1e6);
+      const dbName = entry.meta.database || "test";
+      const mdb = entry.client.db(dbName);
+      // Support simple "db.collection.find()" patterns or raw commands
+      const trimmed = sql.trim();
+      // Try to parse as JSON command
+      try {
+        const cmd = JSON.parse(trimmed);
+        const result = await mdb.command(cmd);
+        return { columns: Object.keys(result), rows: [result], rowCount: 1, duration: duration_fn() };
+      } catch {
+        // Try find-style: collection_name or db.collection.find()
+        const findMatch = trimmed.match(/^(?:db\.)?(\w+)\.find\((.*?)\)$/i);
+        if (findMatch) {
+          const colName = findMatch[1];
+          const filter = findMatch[2] ? JSON.parse(findMatch[2] || "{}") : {};
+          const docs = await mdb.collection(colName).find(filter).limit(100).toArray();
+          const columns = docs.length > 0 ? Object.keys(docs[0]) : [];
+          const rows = docs.map((d) => { const obj = {}; for (const k of columns) { obj[k] = typeof d[k] === "object" ? JSON.stringify(d[k]) : d[k]; } return obj; });
+          return { columns, rows, rowCount: docs.length, duration: duration_fn() };
+        }
+        return { error: `MongoDB: Use JSON commands like {"ping":1} or collection.find() syntax`, duration: duration_fn() };
+      }
+    }
+
+    if (entry.type === "redis") {
+      const duration_fn = () => Math.round(Number(process.hrtime.bigint() - start) / 1e6);
+      const parts = sql.trim().split(/\s+/);
+      const cmd = parts[0].toUpperCase();
+      const args = parts.slice(1);
+      const result = await entry.client.call(cmd, ...args);
+      if (Array.isArray(result)) {
+        const rows = result.map((v, i) => ({ index: i, value: typeof v === "object" ? JSON.stringify(v) : String(v) }));
+        return { columns: ["index", "value"], rows, rowCount: rows.length, duration: duration_fn() };
+      }
+      return { columns: ["result"], rows: [{ result: typeof result === "object" ? JSON.stringify(result) : String(result) }], rowCount: 1, duration: duration_fn() };
+    }
+
+    if (entry.type === "sqlserver") {
+      const res = await entry.client.request().query(sql);
+      const duration = Number(process.hrtime.bigint() - start) / 1e6;
+      if (res.recordset && res.recordset.length > 0) {
+        const columns = Object.keys(res.recordset[0]);
+        return { columns, rows: res.recordset, rowCount: res.recordset.length, duration: Math.round(duration) };
+      }
+      return { columns: [], rows: [], rowCount: res.rowsAffected?.[0] || 0, duration: Math.round(duration), message: `${res.rowsAffected?.[0] || 0} rows affected` };
+    }
+
+    return { error: `Unsupported DB type: ${entry.type}`, duration: 0 };
+  } catch (e) {
+    const duration = Number(process.hrtime.bigint() - start) / 1e6;
+    return { error: e.message, duration: Math.round(duration) };
+  }
+});
+
+// ── KawaiiDB: fetch schema ──────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:fetch-schema", async (_, { connectionId }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { error: "No active connection" };
+
+  try {
+    if (entry.type === "postgresql") {
+      const pool = entry.client;
+      // Tables
+      const tblRes = await pool.query(`
+        SELECT c.relname AS name, c.reltuples::bigint AS row_count
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname
+      `);
+      const tables = [];
+      for (const tbl of tblRes.rows) {
+        // Columns
+        const colRes = await pool.query(`
+          SELECT c.column_name AS name, c.data_type AS type, c.is_nullable,
+            CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS pk
+          FROM information_schema.columns c
+          LEFT JOIN (
+            SELECT kcu.column_name FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+            WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY'
+          ) pk ON pk.column_name = c.column_name
+          WHERE c.table_schema = 'public' AND c.table_name = $1
+          ORDER BY c.ordinal_position
+        `, [tbl.name]);
+        // FKs
+        const fkRes = await pool.query(`
+          SELECT kcu.column_name, ccu.table_name AS fk_table, ccu.column_name AS fk_column
+          FROM information_schema.key_column_usage kcu
+          JOIN information_schema.referential_constraints rc ON rc.constraint_name = kcu.constraint_name AND rc.constraint_schema = kcu.constraint_schema
+          JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = rc.unique_constraint_name
+          WHERE kcu.table_schema = 'public' AND kcu.table_name = $1
+        `, [tbl.name]);
+        const fkMap = {};
+        for (const fk of fkRes.rows) fkMap[fk.column_name] = { fkTable: fk.fk_table, fkColumn: fk.fk_column };
+
+        const columns = colRes.rows.map((c) => ({
+          name: c.name, type: c.type.toUpperCase(), pk: c.pk,
+          ...(fkMap[c.name] ? { fk: true, fkTable: fkMap[c.name].fkTable, fkColumn: fkMap[c.name].fkColumn } : {}),
+        }));
+        tables.push({ name: tbl.name, rowCount: Math.max(0, Number(tbl.row_count)), columns });
+      }
+      // Views
+      const viewRes = await pool.query(`SELECT viewname AS name FROM pg_views WHERE schemaname = 'public' ORDER BY viewname`);
+      const views = viewRes.rows.map((r) => r.name);
+      // Functions
+      const fnRes = await pool.query(`SELECT proname AS name FROM pg_proc JOIN pg_namespace n ON n.oid = pronamespace WHERE n.nspname = 'public' ORDER BY proname`);
+      const functions = fnRes.rows.map((r) => r.name);
+      return { tables, views, storedProcedures: [], functions };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const pool = entry.client;
+      const dbName = entry.meta.database;
+      const [tblRows] = await pool.query(`SELECT TABLE_NAME as name, TABLE_ROWS as row_count FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME`, [dbName]);
+      const tables = [];
+      for (const tbl of tblRows) {
+        const [colRows] = await pool.query(`SELECT COLUMN_NAME as name, COLUMN_TYPE as type, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION`, [dbName, tbl.name]);
+        const [fkRows] = await pool.query(`SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL`, [dbName, tbl.name]);
+        const fkMap = {};
+        for (const fk of fkRows) fkMap[fk.COLUMN_NAME] = { fkTable: fk.REFERENCED_TABLE_NAME, fkColumn: fk.REFERENCED_COLUMN_NAME };
+        const columns = colRows.map((c) => ({
+          name: c.name, type: c.type.toUpperCase(), pk: c.COLUMN_KEY === "PRI",
+          ...(fkMap[c.name] ? { fk: true, fkTable: fkMap[c.name].fkTable, fkColumn: fkMap[c.name].fkColumn } : {}),
+        }));
+        tables.push({ name: tbl.name, rowCount: tbl.row_count || 0, columns });
+      }
+      const [viewRows] = await pool.query(`SELECT TABLE_NAME as name FROM information_schema.VIEWS WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME`, [dbName]);
+      const [spRows] = await pool.query(`SELECT ROUTINE_NAME as name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'PROCEDURE' ORDER BY ROUTINE_NAME`, [dbName]);
+      const [fnRows] = await pool.query(`SELECT ROUTINE_NAME as name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'FUNCTION' ORDER BY ROUTINE_NAME`, [dbName]);
+      return { tables, views: viewRows.map((r) => r.name), storedProcedures: spRows.map((r) => r.name), functions: fnRows.map((r) => r.name) };
+    }
+
+    if (entry.type === "sqlite") {
+      const db = entry.client;
+      const tblRows = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).all();
+      const tables = [];
+      for (const tbl of tblRows) {
+        const colRows = db.prepare(`PRAGMA table_info(${_dbQuoteId("sqlite", tbl.name)})`).all();
+        const fkRows = db.prepare(`PRAGMA foreign_key_list(${_dbQuoteId("sqlite", tbl.name)})`).all();
+        const fkMap = {};
+        for (const fk of fkRows) fkMap[fk.from] = { fkTable: fk.table, fkColumn: fk.to };
+        const countRow = db.prepare(`SELECT COUNT(*) as cnt FROM ${_dbQuoteId("sqlite", tbl.name)}`).get();
+        const columns = colRows.map((c) => ({
+          name: c.name, type: (c.type || "TEXT").toUpperCase(), pk: c.pk === 1,
+          ...(fkMap[c.name] ? { fk: true, fkTable: fkMap[c.name].fkTable, fkColumn: fkMap[c.name].fkColumn } : {}),
+        }));
+        tables.push({ name: tbl.name, rowCount: countRow.cnt, columns });
+      }
+      const viewRows = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'view' ORDER BY name`).all();
+      return { tables, views: viewRows.map((r) => r.name), storedProcedures: [], functions: [] };
+    }
+
+    if (entry.type === "mongodb") {
+      const dbName = entry.meta.database || "test";
+      const mdb = entry.client.db(dbName);
+      const colls = await mdb.listCollections().toArray();
+      const tables = [];
+      for (const coll of colls) {
+        const count = await mdb.collection(coll.name).estimatedDocumentCount();
+        // Sample docs to infer fields
+        const sample = await mdb.collection(coll.name).find({}).limit(20).toArray();
+        const fieldMap = {};
+        for (const doc of sample) {
+          for (const [k, v] of Object.entries(doc)) {
+            if (!fieldMap[k]) fieldMap[k] = typeof v === "object" ? (Array.isArray(v) ? "ARRAY" : "OBJECT") : (typeof v).toUpperCase();
+          }
+        }
+        const columns = Object.entries(fieldMap).map(([name, type]) => ({
+          name, type, pk: name === "_id",
+        }));
+        tables.push({ name: coll.name, rowCount: count, columns });
+      }
+      return { tables, views: [], storedProcedures: [], functions: [] };
+    }
+
+    if (entry.type === "redis") {
+      // Redis doesn't have traditional schema
+      const info = await entry.client.info("keyspace");
+      const dbMatch = info.match(/db\d+:keys=(\d+)/);
+      const keyCount = dbMatch ? parseInt(dbMatch[1]) : 0;
+      return {
+        tables: [{ name: "keys", rowCount: keyCount, columns: [
+          { name: "key", type: "STRING", pk: true },
+          { name: "value", type: "STRING" },
+          { name: "type", type: "STRING" },
+          { name: "ttl", type: "INTEGER" },
+        ]}],
+        views: [], storedProcedures: [], functions: [],
+      };
+    }
+
+    if (entry.type === "sqlserver") {
+      const pool = entry.client;
+      const tblRes = await pool.request().query(`SELECT t.TABLE_NAME as name, SUM(p.rows) as row_count FROM INFORMATION_SCHEMA.TABLES t LEFT JOIN sys.partitions p ON OBJECT_ID(t.TABLE_SCHEMA + '.' + t.TABLE_NAME) = p.object_id AND p.index_id IN (0,1) WHERE t.TABLE_TYPE = 'BASE TABLE' GROUP BY t.TABLE_NAME ORDER BY t.TABLE_NAME`);
+      const tables = [];
+      for (const tbl of tblRes.recordset) {
+        const colRes = await pool.request().input("tbl", tbl.name).query(`SELECT COLUMN_NAME as name, DATA_TYPE as type, COLUMNPROPERTY(OBJECT_ID(TABLE_SCHEMA+'.'+TABLE_NAME), COLUMN_NAME, 'IsIdentity') as is_identity FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tbl ORDER BY ORDINAL_POSITION`);
+        const columns = colRes.recordset.map((c) => ({ name: c.name, type: c.type.toUpperCase(), pk: c.is_identity === 1 }));
+        tables.push({ name: tbl.name, rowCount: tbl.row_count || 0, columns });
+      }
+      const viewRes = await pool.request().query(`SELECT TABLE_NAME as name FROM INFORMATION_SCHEMA.VIEWS ORDER BY TABLE_NAME`);
+      const spRes = await pool.request().query(`SELECT ROUTINE_NAME as name FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE' ORDER BY ROUTINE_NAME`);
+      const fnRes = await pool.request().query(`SELECT ROUTINE_NAME as name FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'FUNCTION' ORDER BY ROUTINE_NAME`);
+      return { tables, views: viewRes.recordset.map((r) => r.name), storedProcedures: spRes.recordset.map((r) => r.name), functions: fnRes.recordset.map((r) => r.name) };
+    }
+
+    return { error: `Unsupported: ${entry.type}` };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+// ── KawaiiDB: fetch table data (paginated) ──────────────────────────────────
+ipcMain.handle("kawaiidb:fetch-table-data", async (_, { connectionId, tableName, page, pageSize, sortColumn, sortDir }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { error: "No active connection" };
+
+  const pg = page || 1;
+  const ps = pageSize || 25;
+  const offset = (pg - 1) * ps;
+  const qid = _dbQuoteId(entry.type, tableName);
+  const orderClause = sortColumn ? `ORDER BY ${_dbQuoteId(entry.type, sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}` : "";
+
+  try {
+    if (entry.type === "postgresql") {
+      const countRes = await entry.client.query(`SELECT COUNT(*) as cnt FROM ${qid}`);
+      const totalRows = parseInt(countRes.rows[0].cnt);
+      const dataRes = await entry.client.query(`SELECT * FROM ${qid} ${orderClause} LIMIT ${ps} OFFSET ${offset}`);
+      const columns = dataRes.fields.map((f) => f.name);
+      const rows = dataRes.rows.map((r) => {
+        const obj = {};
+        for (const col of columns) {
+          let v = r[col];
+          if (v instanceof Date) v = v.toISOString();
+          else if (Buffer.isBuffer(v)) v = `<binary ${v.length}B>`;
+          else if (typeof v === "bigint") v = v.toString();
+          obj[col] = v;
+        }
+        return obj;
+      });
+      return { columns, rows, totalRows, page: pg, pageSize: ps };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const [[countRow]] = await entry.client.query(`SELECT COUNT(*) as cnt FROM ${qid}`);
+      const totalRows = countRow.cnt;
+      const [dataRows, fields] = await entry.client.query(`SELECT * FROM ${qid} ${orderClause} LIMIT ${ps} OFFSET ${offset}`);
+      const columns = fields.map((f) => f.name);
+      const rows = dataRows.map((r) => {
+        const obj = {};
+        for (const col of columns) { let v = r[col]; if (v instanceof Date) v = v.toISOString(); else if (Buffer.isBuffer(v)) v = `<binary ${v.length}B>`; obj[col] = v; }
+        return obj;
+      });
+      return { columns, rows, totalRows, page: pg, pageSize: ps };
+    }
+
+    if (entry.type === "sqlite") {
+      const countRow = entry.client.prepare(`SELECT COUNT(*) as cnt FROM ${qid}`).get();
+      const totalRows = countRow.cnt;
+      const orderSQL = sortColumn ? `ORDER BY ${_dbQuoteId("sqlite", sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}` : "";
+      const rows = entry.client.prepare(`SELECT * FROM ${qid} ${orderSQL} LIMIT ? OFFSET ?`).all(ps, offset);
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      return { columns, rows, totalRows, page: pg, pageSize: ps };
+    }
+
+    if (entry.type === "mongodb") {
+      const mdb = entry.client.db(entry.meta.database || "test");
+      const coll = mdb.collection(tableName);
+      const totalRows = await coll.estimatedDocumentCount();
+      const sort = sortColumn ? { [sortColumn]: sortDir === "desc" ? -1 : 1 } : {};
+      const docs = await coll.find({}).sort(sort).skip(offset).limit(ps).toArray();
+      const columns = docs.length > 0 ? Object.keys(docs[0]) : [];
+      const rows = docs.map((d) => {
+        const obj = {};
+        for (const k of columns) { obj[k] = typeof d[k] === "object" ? JSON.stringify(d[k]) : d[k]; }
+        return obj;
+      });
+      return { columns, rows, totalRows, page: pg, pageSize: ps };
+    }
+
+    if (entry.type === "redis") {
+      // Scan keys
+      const keys = [];
+      let cursor = "0";
+      do {
+        const [nextCursor, batch] = await entry.client.scan(cursor, "COUNT", 100);
+        cursor = nextCursor;
+        keys.push(...batch);
+        if (keys.length >= offset + ps + 10) break;
+      } while (cursor !== "0");
+      const pageKeys = keys.slice(offset, offset + ps);
+      const rows = [];
+      for (const k of pageKeys) {
+        const type = await entry.client.type(k);
+        const ttl = await entry.client.ttl(k);
+        let value = "";
+        try {
+          if (type === "string") value = await entry.client.get(k);
+          else if (type === "list") value = `[list: ${await entry.client.llen(k)} items]`;
+          else if (type === "set") value = `[set: ${await entry.client.scard(k)} members]`;
+          else if (type === "hash") value = `[hash: ${await entry.client.hlen(k)} fields]`;
+          else if (type === "zset") value = `[zset: ${await entry.client.zcard(k)} members]`;
+        } catch { value = "(error)"; }
+        rows.push({ key: k, value, type, ttl });
+      }
+      return { columns: ["key", "value", "type", "ttl"], rows, totalRows: keys.length, page: pg, pageSize: ps };
+    }
+
+    if (entry.type === "sqlserver") {
+      const countRes = await entry.client.request().query(`SELECT COUNT(*) as cnt FROM ${qid}`);
+      const totalRows = countRes.recordset[0].cnt;
+      const order = sortColumn ? `ORDER BY ${_dbQuoteId("sqlserver", sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}` : "ORDER BY (SELECT NULL)";
+      const dataRes = await entry.client.request().query(`SELECT * FROM ${qid} ${order} OFFSET ${offset} ROWS FETCH NEXT ${ps} ROWS ONLY`);
+      const columns = dataRes.recordset.length > 0 ? Object.keys(dataRes.recordset[0]) : [];
+      return { columns, rows: dataRes.recordset, totalRows, page: pg, pageSize: ps };
+    }
+
+    return { error: `Unsupported: ${entry.type}` };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+// ── KawaiiDB: server info ───────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:get-server-info", async (_, { connectionId }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { error: "No active connection" };
+
+  try {
+    if (entry.type === "postgresql") {
+      const pool = entry.client;
+      const [verRes, uptimeRes, sizeRes, connRes, maxRes, statsRes] = await Promise.all([
+        pool.query("SELECT version()"),
+        pool.query("SELECT EXTRACT(EPOCH FROM current_timestamp - pg_postmaster_start_time()) AS uptime_sec"),
+        pool.query("SELECT pg_database_size(current_database()) AS size"),
+        pool.query("SELECT count(*) AS cnt FROM pg_stat_activity"),
+        pool.query("SHOW max_connections"),
+        pool.query("SELECT * FROM pg_stat_database WHERE datname = current_database()"),
+      ]);
+      const uptimeSec = Math.floor(verRes.rows[0] ? uptimeRes.rows[0].uptime_sec : 0);
+      const days = Math.floor(uptimeSec / 86400);
+      const hours = Math.floor((uptimeSec % 86400) / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const uptime = `${days}d ${hours}h ${mins}m`;
+      const dbSize = (sizeRes.rows[0].size / (1024 * 1024)).toFixed(1);
+      const activeConns = parseInt(connRes.rows[0].cnt);
+      const maxConns = parseInt(maxRes.rows[0].max_connections);
+      const connPct = Math.round((activeConns / maxConns) * 100);
+      const stats = statsRes.rows[0] || {};
+      const queriesTotal = (stats.tup_returned || 0) + (stats.tup_fetched || 0) + (stats.tup_inserted || 0) + (stats.tup_updated || 0) + (stats.tup_deleted || 0);
+
+      return {
+        version: entry.meta.version,
+        uptime,
+        serverInfo: [
+          { label: "Server", value: entry.meta.version },
+          { label: "Connection", value: entry.meta.database },
+          { label: "Uptime", value: uptime },
+          { label: "Database Size", value: `${dbSize} MB` },
+          { label: "Active Connections", value: `${activeConns} / ${maxConns}`, progress: connPct, progressColor: connPct > 80 ? "#F85149" : "#3DEFE9" },
+          { label: "Tuples Returned", value: (stats.tup_returned || 0).toLocaleString() },
+          { label: "Tuples Fetched", value: (stats.tup_fetched || 0).toLocaleString() },
+          { label: "Transactions", value: `${(stats.xact_commit || 0).toLocaleString()} committed` },
+        ],
+        metrics: {
+          queriesPerSec: Math.round(queriesTotal / Math.max(1, uptimeSec)),
+          avgQueryTime: stats.blk_read_time ? Math.round(stats.blk_read_time / Math.max(1, queriesTotal)) : 0,
+          diskUsed: parseFloat(dbSize),
+          diskTotal: 100,
+        },
+      };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const pool = entry.client;
+      const [[verRow]] = await pool.query("SELECT VERSION() as v");
+      const [[uptimeRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Uptime'");
+      const [[threadsRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Threads_connected'");
+      const [[maxRow]] = await pool.query("SHOW VARIABLES LIKE 'max_connections'");
+      const [[slowRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Slow_queries'");
+      const [[questionsRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Questions'");
+      const [[sizeRow]] = await pool.query(`SELECT SUM(data_length + index_length) AS size FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?`, [entry.meta.database]);
+      const [[bufferRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_pages_total'");
+      const [[bufferFreeRow]] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_pages_free'");
+
+      const uptimeSec = parseInt(uptimeRow?.Value || 0);
+      const days = Math.floor(uptimeSec / 86400);
+      const hours = Math.floor((uptimeSec % 86400) / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const uptime = `${days}d ${hours}h ${mins}m`;
+      const threads = parseInt(threadsRow?.Value || 0);
+      const maxConns = parseInt(maxRow?.Value || 100);
+      const connPct = Math.round((threads / maxConns) * 100);
+      const questions = parseInt(questionsRow?.Value || 0);
+      const dbSizeMB = ((sizeRow?.size || 0) / (1024 * 1024)).toFixed(1);
+      const bufTotal = parseInt(bufferRow?.Value || 0);
+      const bufFree = parseInt(bufferFreeRow?.Value || 0);
+      const bufPct = bufTotal > 0 ? Math.round(((bufTotal - bufFree) / bufTotal) * 100) : 0;
+
+      return {
+        version: entry.meta.version,
+        uptime,
+        serverInfo: [
+          { label: "Server", value: entry.meta.version },
+          { label: "Database", value: entry.meta.database || "--" },
+          { label: "Uptime", value: uptime },
+          { label: "Database Size", value: `${dbSizeMB} MB` },
+          { label: "Buffer Pool", value: `${bufPct}% used`, progress: bufPct, progressColor: bufPct > 80 ? "#F85149" : "#3FB950" },
+          { label: "Slow Queries", value: (parseInt(slowRow?.Value) || 0).toLocaleString(), valueColor: parseInt(slowRow?.Value) > 100 ? "#F85149" : undefined },
+          { label: "Connections", value: `${threads} / ${maxConns}`, progress: connPct, progressColor: connPct > 80 ? "#F85149" : "#3DEFE9" },
+          { label: "Total Queries", value: questions.toLocaleString() },
+        ],
+        metrics: {
+          queriesPerSec: Math.round(questions / Math.max(1, uptimeSec)),
+          avgQueryTime: 0,
+          diskUsed: parseFloat(dbSizeMB),
+          diskTotal: 100,
+        },
+      };
+    }
+
+    if (entry.type === "sqlite") {
+      const db = entry.client;
+      const pageCount = db.prepare("PRAGMA page_count").get();
+      const pageSize = db.prepare("PRAGMA page_size").get();
+      const sizeMB = ((pageCount.page_count * pageSize.page_size) / (1024 * 1024)).toFixed(1);
+      const journal = db.prepare("PRAGMA journal_mode").get();
+      return {
+        version: entry.meta.version,
+        uptime: "N/A (file DB)",
+        serverInfo: [
+          { label: "Engine", value: entry.meta.version },
+          { label: "Database", value: entry.meta.database },
+          { label: "File Size", value: `${sizeMB} MB` },
+          { label: "Journal Mode", value: journal.journal_mode },
+          { label: "Page Size", value: `${pageSize.page_size} bytes` },
+          { label: "Page Count", value: pageCount.page_count.toLocaleString() },
+        ],
+        metrics: { queriesPerSec: 0, avgQueryTime: 0, diskUsed: parseFloat(sizeMB), diskTotal: 100 },
+      };
+    }
+
+    if (entry.type === "mongodb") {
+      const admin = entry.client.db("admin");
+      const status = await admin.command({ serverStatus: 1 });
+      const uptimeSec = status.uptime || 0;
+      const days = Math.floor(uptimeSec / 86400);
+      const hours = Math.floor((uptimeSec % 86400) / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const memMB = status.mem ? status.mem.resident : 0;
+      const conns = status.connections || {};
+
+      return {
+        version: entry.meta.version,
+        uptime: `${days}d ${hours}h ${mins}m`,
+        serverInfo: [
+          { label: "Server", value: entry.meta.version },
+          { label: "Database", value: entry.meta.database },
+          { label: "Uptime", value: `${days}d ${hours}h ${mins}m` },
+          { label: "Memory", value: `${memMB} MB resident` },
+          { label: "Connections", value: `${conns.current || 0} / ${conns.available || 0}`, progress: conns.available ? Math.round((conns.current / conns.available) * 100) : 0, progressColor: "#3DEFE9" },
+          { label: "Operations", value: `${((status.opcounters?.query || 0) + (status.opcounters?.insert || 0)).toLocaleString()} total` },
+        ],
+        metrics: { queriesPerSec: Math.round((status.opcounters?.query || 0) / Math.max(1, uptimeSec)), avgQueryTime: 0, diskUsed: memMB, diskTotal: 1000 },
+      };
+    }
+
+    if (entry.type === "redis") {
+      const infoAll = await entry.client.info();
+      const extract = (key) => { const m = infoAll.match(new RegExp(`${key}:(.+)`)); return m ? m[1].trim() : "0"; };
+      const uptimeSec = parseInt(extract("uptime_in_seconds"));
+      const days = Math.floor(uptimeSec / 86400);
+      const hours = Math.floor((uptimeSec % 86400) / 3600);
+      const usedMem = extract("used_memory_human");
+      const connectedClients = extract("connected_clients");
+      const totalCommands = extract("total_commands_processed");
+      return {
+        version: entry.meta.version,
+        uptime: `${days}d ${hours}h`,
+        serverInfo: [
+          { label: "Server", value: entry.meta.version },
+          { label: "Uptime", value: `${days}d ${hours}h` },
+          { label: "Memory Used", value: usedMem },
+          { label: "Connected Clients", value: connectedClients },
+          { label: "Total Commands", value: parseInt(totalCommands).toLocaleString() },
+          { label: "Keyspace Hits", value: extract("keyspace_hits") },
+        ],
+        metrics: { queriesPerSec: Math.round(parseInt(totalCommands) / Math.max(1, uptimeSec)), avgQueryTime: 0, diskUsed: 0, diskTotal: 100 },
+      };
+    }
+
+    return { serverInfo: [{ label: "Server", value: entry.meta.version }], metrics: {} };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+// ── KawaiiDB: active queries ────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:get-active-queries", async (_, { connectionId }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { queries: [] };
+
+  try {
+    if (entry.type === "postgresql") {
+      const res = await entry.client.query(`
+        SELECT pid, usename AS user, datname AS db, query, state,
+          EXTRACT(EPOCH FROM now() - query_start)::int AS duration_sec
+        FROM pg_stat_activity
+        WHERE state != 'idle' AND pid != pg_backend_pid()
+        ORDER BY query_start
+      `);
+      return { queries: res.rows.map((r) => ({ pid: r.pid, user: r.user, db: r.db, query: r.query, duration: `${r.duration_sec}s`, state: r.state })) };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const [rows] = await entry.client.query(`SELECT ID as pid, USER as user, DB as db, INFO as query, TIME as duration_sec, COMMAND as state FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep' AND ID != CONNECTION_ID() ORDER BY TIME DESC`);
+      return { queries: rows.map((r) => ({ pid: r.pid, user: r.user, db: r.db, query: r.query, duration: `${r.duration_sec}s`, state: r.state })) };
+    }
+
+    if (entry.type === "mongodb") {
+      const ops = await entry.client.db("admin").command({ currentOp: true, active: true });
+      return { queries: (ops.inprog || []).slice(0, 20).map((op) => ({ pid: op.opid, user: op.client || "--", db: op.ns, query: JSON.stringify(op.command || {}).slice(0, 200), duration: `${Math.round((op.microsecs_running || 0) / 1e6)}s`, state: op.op })) };
+    }
+
+    return { queries: [] };
+  } catch (e) {
+    return { queries: [], error: e.message };
+  }
+});
+
+// ── KawaiiDB: explain query ─────────────────────────────────────────────────
+ipcMain.handle("kawaiidb:explain-query", async (_, { connectionId, sql }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { plan: [] };
+
+  try {
+    if (entry.type === "postgresql") {
+      const res = await entry.client.query(`EXPLAIN (FORMAT JSON) ${sql}`);
+      const planJson = res.rows[0]["QUERY PLAN"] || res.rows[0]["query plan"];
+      const planArr = Array.isArray(planJson) ? planJson : [planJson];
+      const rows = [];
+      function walkPlan(node) {
+        if (!node) return;
+        const plan = node.Plan || node;
+        const scanType = plan["Node Type"] || "Unknown";
+        const typeMap = { "Seq Scan": "ALL", "Index Scan": "ref", "Index Only Scan": "ref", "Bitmap Heap Scan": "range", "Hash Join": "join", "Nested Loop": "loop", "Merge Join": "merge", "Sort": "sort", "Aggregate": "agg" };
+        rows.push({
+          table: plan["Relation Name"] || plan["Alias"] || "--",
+          type: typeMap[scanType] || scanType,
+          rows: `~${Math.round(plan["Plan Rows"] || 0)}`,
+          key: plan["Index Name"] || null,
+          extra: [plan["Filter"], plan["Sort Key"] ? `Sort: ${plan["Sort Key"].join(",")}` : null].filter(Boolean).join("; ") || scanType,
+        });
+        if (plan.Plans) plan.Plans.forEach(walkPlan);
+      }
+      planArr.forEach(walkPlan);
+      return { plan: rows };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const [rows] = await entry.client.query(`EXPLAIN ${sql}`);
+      return {
+        plan: rows.map((r) => ({
+          table: r.table || "--",
+          type: r.type || "ALL",
+          rows: `~${r.rows || 0}`,
+          key: r.key || null,
+          extra: r.Extra || "",
+        })),
+      };
+    }
+
+    if (entry.type === "sqlite") {
+      const rows = entry.client.prepare(`EXPLAIN QUERY PLAN ${sql}`).all();
+      return {
+        plan: rows.map((r) => ({
+          table: r.detail?.match(/(?:SCAN|SEARCH) TABLE (\w+)/)?.[1] || "--",
+          type: r.detail?.includes("SEARCH") ? "ref" : r.detail?.includes("SCAN") ? "ALL" : "misc",
+          rows: "~?",
+          key: r.detail?.match(/USING (?:INDEX|COVERING INDEX) (\w+)/)?.[1] || null,
+          extra: r.detail || "",
+        })),
+      };
+    }
+
+    return { plan: [] };
+  } catch (e) {
+    return { plan: [], error: e.message };
+  }
 });
 
 // ── Shinra Tensei filesystem IPC ──────────────────────────────────────────────

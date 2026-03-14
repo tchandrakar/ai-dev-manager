@@ -50,6 +50,14 @@ contextBridge.exposeInMainWorld("akatsuki", {
 
   kawaiidb: {
     testConnection: (opts) => ipcRenderer.invoke("kawaiidb:test-connection", opts),
+    connect: (opts) => ipcRenderer.invoke("kawaiidb:connect", opts),
+    disconnect: (opts) => ipcRenderer.invoke("kawaiidb:disconnect", opts),
+    executeQuery: (opts) => ipcRenderer.invoke("kawaiidb:execute-query", opts),
+    fetchSchema: (opts) => ipcRenderer.invoke("kawaiidb:fetch-schema", opts),
+    fetchTableData: (opts) => ipcRenderer.invoke("kawaiidb:fetch-table-data", opts),
+    getServerInfo: (opts) => ipcRenderer.invoke("kawaiidb:get-server-info", opts),
+    getActiveQueries: (opts) => ipcRenderer.invoke("kawaiidb:get-active-queries", opts),
+    explainQuery: (opts) => ipcRenderer.invoke("kawaiidb:explain-query", opts),
   },
 
   shinra: {

@@ -411,7 +411,7 @@ function AppInner() {
         collapsed={collapsed}
         onToggle={toggleCollapse}
       />
-      <div key={screen} className="screen-enter" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div key={screen.startsWith("kawaiidb") ? "kawaiidb" : screen.startsWith("shinra") ? "shinra" : screen} className="screen-enter" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {screen === "review"      && <ScreenReview onReviewSaved={refreshHistoryCount} />}
         {screen === "history"     && <ScreenHistory />}
         {screen === "connectors"  && <ScreenConnectors />}
