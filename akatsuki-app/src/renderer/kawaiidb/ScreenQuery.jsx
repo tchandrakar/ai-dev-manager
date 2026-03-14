@@ -1,8 +1,8 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { T } from "../tokens";
 import { PanelHeader, Btn } from "../components";
 import { useKawaii } from "./KawaiiApp";
-import { highlightSQL } from "./ScreenAIAnalyze";
+import { highlightSQL, SQL_KEYWORDS, SQL_FUNCTIONS } from "./ScreenAIAnalyze";
 
 // ── Tab button (named component — no hooks in .map) ─────────────────────────
 function TabButton({ tab, isActive, tabCount, onSelect, onClose, onRename }) {
@@ -127,20 +127,255 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, onRename }) {
   );
 }
 
+// ── SQL Autocomplete ─────────────────────────────────────────────────────────
+
+// Build flat suggestion list from schema + keywords
+export function buildSuggestions(schema) {
+  const items = [];
+  // SQL keywords
+  for (const kw of SQL_KEYWORDS) items.push({ label: kw, kind: "keyword", detail: "keyword" });
+  // SQL functions
+  for (const fn of SQL_FUNCTIONS) {
+    if (!SQL_KEYWORDS.has(fn)) items.push({ label: fn, kind: "function", detail: "function" });
+  }
+  // Schema tables + columns
+  if (schema?.tables) {
+    for (const tbl of schema.tables) {
+      items.push({ label: tbl.name, kind: "table", detail: `table (${tbl.rowCount ?? "?"} rows)` });
+      if (tbl.columns) {
+        for (const col of tbl.columns) {
+          items.push({ label: col.name, kind: "column", detail: `${tbl.name}.${col.type}${col.pk ? " PK" : ""}` });
+        }
+      }
+    }
+  }
+  if (schema?.views) {
+    for (const v of schema.views) items.push({ label: v, kind: "view", detail: "view" });
+  }
+  return items;
+}
+
+// Get the word being typed at cursor position
+function getWordAtCursor(text, pos) {
+  const before = text.substring(0, pos);
+  const match = before.match(/[a-zA-Z_][\w]*$/);
+  return match ? { word: match[0], start: pos - match[0].length } : null;
+}
+
+// Icon for suggestion kind
+const KIND_ICONS = {
+  keyword: { color: T.blue, letter: "K" },
+  function: { color: T.purple, letter: "F" },
+  table: { color: T.teal, letter: "T" },
+  column: { color: T.amber, letter: "C" },
+  view: { color: T.green, letter: "V" },
+};
+
+function SuggestionItem({ item, isSelected, onClick }) {
+  const icon = KIND_ICONS[item.kind] || { color: T.txt3, letter: "?" };
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "4px 10px", cursor: "pointer",
+        background: isSelected ? `${T.blue}20` : "transparent",
+        borderLeft: isSelected ? `2px solid ${T.blue}` : "2px solid transparent",
+        transition: "background 0.08s",
+      }}
+    >
+      <span style={{
+        width: 18, height: 18, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 9, fontWeight: 700, fontFamily: T.fontUI,
+        background: `${icon.color}20`, color: icon.color, border: `1px solid ${icon.color}40`,
+        flexShrink: 0,
+      }}>{icon.letter}</span>
+      <span style={{ fontSize: 12, fontFamily: T.fontMono, color: T.txt, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.label}
+      </span>
+      <span style={{ fontSize: 10, fontFamily: T.fontUI, color: T.txt3, flexShrink: 0 }}>
+        {item.detail}
+      </span>
+    </div>
+  );
+}
+
+export function SuggestionDropdownInline({ textareaRef, sql, cursorTrigger, suggestions, visible, onSelect, selectedIdxRef, filteredRef }) {
+  const listRef = useRef(null);
+  const [, forceUpdate] = useState(0);
+
+  // Filter suggestions based on current word
+  const wordInfo = useMemo(() => {
+    if (!textareaRef.current || !visible) return null;
+    return getWordAtCursor(sql, textareaRef.current.selectionStart);
+  }, [sql, visible, cursorTrigger]); // eslint-disable-line
+
+  const filtered = useMemo(() => {
+    if (!wordInfo || !wordInfo.word) return [];
+    const prefix = wordInfo.word.toLowerCase();
+    if (prefix.length < 1) return [];
+    const seen = new Set();
+    const results = suggestions.filter((s) => {
+      const lower = s.label.toLowerCase();
+      if (seen.has(lower)) return false;
+      if (!lower.startsWith(prefix)) return false;
+      if (lower === prefix) return false;
+      seen.add(lower);
+      return true;
+    }).slice(0, 12);
+    filteredRef.current = results;
+    return results;
+  }, [wordInfo, suggestions]); // eslint-disable-line
+
+  // Reset selection and sync on filter change
+  useEffect(() => {
+    selectedIdxRef.current = 0;
+    forceUpdate((n) => n + 1);
+  }, [filtered.length]); // eslint-disable-line
+
+  // Re-render on cursor trigger (for arrow key navigation)
+  useEffect(() => { forceUpdate((n) => n + 1); }, [cursorTrigger]);
+
+  // Scroll selected into view
+  useEffect(() => {
+    if (listRef.current) {
+      const el = listRef.current.children[selectedIdxRef.current];
+      if (el) el.scrollIntoView({ block: "nearest" });
+    }
+  }, [cursorTrigger]); // eslint-disable-line
+
+  if (!visible || filtered.length === 0 || !wordInfo) return null;
+
+  const ta = textareaRef.current;
+  let top = 0, left = 0;
+  if (ta) {
+    const lines = sql.substring(0, ta.selectionStart).split("\n");
+    const lineIdx = lines.length - 1;
+    const colIdx = lines[lineIdx].length;
+    top = (lineIdx + 1) * 20 + 8 - ta.scrollTop;
+    left = colIdx * 7.2 + 12;
+  }
+
+  return (
+    <div
+      style={{
+        position: "absolute", top, left, zIndex: 100,
+        minWidth: 280, maxWidth: 420, maxHeight: 240, overflow: "auto",
+        background: T.bg2, border: `1px solid ${T.border2}`,
+        borderRadius: 6, boxShadow: `0 4px 16px ${T.bg0}80`,
+        padding: "4px 0",
+      }}
+      ref={listRef}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {filtered.map((item, idx) => (
+        <SuggestionItem
+          key={`${item.kind}-${item.label}`}
+          item={item}
+          isSelected={idx === selectedIdxRef.current}
+          onClick={() => onSelect(item, wordInfo)}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Hook to manage autocomplete state with keyboard handling
+export function useAutocomplete(textareaRef, sql, onChange, suggestions) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [cursorTrigger, setCursorTrigger] = useState(0);
+  const selectedIdxRef = useRef(0);
+  const filteredRef = useRef([]);
+
+  // Show/hide on input change
+  const handleInputForSuggestions = useCallback(() => {
+    if (!textareaRef.current) return;
+    const wordInfo = getWordAtCursor(sql, textareaRef.current.selectionStart);
+    setShowSuggestions(!!(wordInfo && wordInfo.word && wordInfo.word.length >= 1));
+    setCursorTrigger((c) => c + 1);
+  }, [sql, textareaRef]);
+
+  // Accept selected suggestion
+  const acceptSuggestion = useCallback((item, wordInfo) => {
+    if (!wordInfo) return;
+    const before = sql.substring(0, wordInfo.start);
+    const after = sql.substring(wordInfo.start + wordInfo.word.length);
+    const insertion = item.kind === "keyword" || item.kind === "function" ? item.label + " " : item.label;
+    onChange(before + insertion + after);
+    setShowSuggestions(false);
+    // Restore cursor position
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        const newPos = wordInfo.start + insertion.length;
+        textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newPos;
+        textareaRef.current.focus();
+      }
+    });
+  }, [sql, onChange, textareaRef]);
+
+  // Keyboard handler (call this in the editor's onKeyDown)
+  const handleKeyDownForSuggestions = useCallback((e) => {
+    if (!showSuggestions || filteredRef.current.length === 0) return false;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedIdxRef.current = Math.min(selectedIdxRef.current + 1, filteredRef.current.length - 1);
+      setCursorTrigger((c) => c + 1);
+      return true;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedIdxRef.current = Math.max(selectedIdxRef.current - 1, 0);
+      setCursorTrigger((c) => c + 1);
+      return true;
+    }
+    if (e.key === "Tab" || e.key === "Enter") {
+      if (filteredRef.current.length > 0) {
+        e.preventDefault();
+        const item = filteredRef.current[selectedIdxRef.current] || filteredRef.current[0];
+        const wordInfo = getWordAtCursor(sql, textareaRef.current?.selectionStart || 0);
+        if (item && wordInfo) acceptSuggestion(item, wordInfo);
+        return true;
+      }
+    }
+    if (e.key === "Escape") {
+      setShowSuggestions(false);
+      return true;
+    }
+    return false;
+  }, [showSuggestions, sql, acceptSuggestion, textareaRef]);
+
+  return {
+    showSuggestions,
+    setShowSuggestions,
+    cursorTrigger,
+    handleInputForSuggestions,
+    acceptSuggestion,
+    handleKeyDownForSuggestions,
+    selectedIdxRef,
+    filteredRef,
+  };
+}
+
 // ── SQL Editor (editable textarea with syntax highlight overlay) ─────────────
-function SQLEditor({ sql, onChange, onRun }) {
+function SQLEditor({ sql, onChange, onRun, suggestions }) {
   const textareaRef = useRef(null);
   const overlayRef = useRef(null);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
 
   const lines = sql.split("\n");
 
+  const ac = useAutocomplete(textareaRef, sql, onChange, suggestions || []);
+
   const handleInput = (e) => {
     onChange(e.target.value);
+    // Trigger suggestion check after state update
+    requestAnimationFrame(() => ac.handleInputForSuggestions());
   };
 
   const handleKeyDown = (e) => {
-    // Tab key inserts 2 spaces
+    // Let autocomplete handle first
+    if (ac.handleKeyDownForSuggestions(e)) return;
+    // Tab key inserts 2 spaces (only when no suggestions)
     if (e.key === "Tab") {
       e.preventDefault();
       const ta = e.target;
@@ -257,6 +492,18 @@ function SQLEditor({ sql, onChange, onRun }) {
               whiteSpace: "pre-wrap", wordBreak: "break-all",
               overflow: "auto",
             }}
+          />
+
+          {/* Autocomplete dropdown */}
+          <SuggestionDropdownInline
+            textareaRef={textareaRef}
+            sql={sql}
+            cursorTrigger={ac.cursorTrigger}
+            suggestions={suggestions || []}
+            visible={ac.showSuggestions}
+            onSelect={ac.acceptSuggestion}
+            selectedIdxRef={ac.selectedIdxRef}
+            filteredRef={ac.filteredRef}
           />
         </div>
       </div>
@@ -397,7 +644,11 @@ function ScreenQuery() {
     activeSqlTab,
     setActiveSqlTab,
     addSqlTab,
+    schema,
   } = useKawaii();
+
+  // Build suggestion list from schema + keywords
+  const suggestions = useMemo(() => buildSuggestions(schema), [schema]);
 
   // Per-tab SQL content & results stored here
   const [tabContents, setTabContents] = useState(() => {
@@ -584,7 +835,7 @@ function ScreenQuery() {
           </span>
         </PanelHeader>
 
-        <SQLEditor sql={currentSql} onChange={handleSqlChange} onRun={handleRun} />
+        <SQLEditor sql={currentSql} onChange={handleSqlChange} onRun={handleRun} suggestions={suggestions} />
       </div>
 
       {/* Results (bottom half) */}

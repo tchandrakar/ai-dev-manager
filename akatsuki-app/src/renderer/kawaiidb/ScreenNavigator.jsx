@@ -4,6 +4,7 @@ import { PanelHeader } from "../components";
 import { useKawaii } from "./KawaiiApp";
 import { DB_TYPES } from "./mockData";
 import { highlightSQL } from "./ScreenAIAnalyze";
+import { buildSuggestions, useAutocomplete, SuggestionDropdownInline } from "./ScreenQuery";
 
 // ── Status color helper ─────────────────────────────────────────────────────
 function statusColor(status) {
@@ -560,7 +561,8 @@ function QueryResultRow({ row, columns, rowIndex }) {
 
 // ── SQL Editor Sub-View ─────────────────────────────────────────────────────
 function SQLEditorView() {
-  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab, activeConnection } = useKawaii();
+  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab, activeConnection, schema } = useKawaii();
+  const suggestions = useMemo(() => buildSuggestions(schema), [schema]);
 
   // Per-tab SQL content storage
   const [tabContents, setTabContents] = useState(() => {
@@ -586,6 +588,12 @@ function SQLEditorView() {
   const [cursorLine, setCursorLine] = useState(1);
   const [cursorCol, setCursorCol] = useState(1);
 
+  // Autocomplete
+  const handleSqlChangeForAC = useCallback((val) => {
+    setTabContents((prev) => ({ ...prev, [activeSqlTab]: val }));
+  }, [activeSqlTab]);
+  const ac = useAutocomplete(textareaRef, tabContents[activeSqlTab] || "", handleSqlChangeForAC, suggestions);
+
   // Sync new tabs into tabContents
   useEffect(() => {
     setTabContents((prev) => {
@@ -606,8 +614,9 @@ function SQLEditorView() {
     (e) => {
       const val = e.target.value;
       setTabContents((prev) => ({ ...prev, [activeSqlTab]: val }));
+      requestAnimationFrame(() => ac.handleInputForSuggestions());
     },
-    [activeSqlTab]
+    [activeSqlTab, ac.handleInputForSuggestions]
   );
 
   const handleCursorChange = useCallback((e) => {
@@ -724,12 +733,14 @@ function SQLEditorView() {
   // Keyboard shortcut
   const handleKeyDown = useCallback(
     (e) => {
+      // Let autocomplete handle first
+      if (ac.handleKeyDownForSuggestions(e)) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         handleRunQuery();
       }
     },
-    [handleRunQuery]
+    [handleRunQuery, ac.handleKeyDownForSuggestions]
   );
 
   const result = tabResults[activeSqlTab];
@@ -959,6 +970,18 @@ function SQLEditorView() {
                   wordBreak: "break-all",
                   overflow: "hidden",
                 }}
+              />
+
+              {/* Autocomplete dropdown */}
+              <SuggestionDropdownInline
+                textareaRef={textareaRef}
+                sql={currentContent}
+                cursorTrigger={ac.cursorTrigger}
+                suggestions={suggestions}
+                visible={ac.showSuggestions}
+                onSelect={ac.acceptSuggestion}
+                selectedIdxRef={ac.selectedIdxRef}
+                filteredRef={ac.filteredRef}
               />
             </div>
           </div>

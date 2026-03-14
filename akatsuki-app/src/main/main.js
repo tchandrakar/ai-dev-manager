@@ -1298,6 +1298,65 @@ ipcMain.handle("kawaiidb:get-active-queries", async (_, { connectionId }) => {
   }
 });
 
+// ── KawaiiDB: query type stats (for dashboard donut chart) ──────────────────
+ipcMain.handle("kawaiidb:get-query-stats", async (_, { connectionId }) => {
+  const entry = _dbPools.get(connectionId);
+  if (!entry) return { stats: null };
+
+  try {
+    if (entry.type === "postgresql") {
+      const res = await entry.client.query(`
+        SELECT tup_returned, tup_fetched, tup_inserted, tup_updated, tup_deleted
+        FROM pg_stat_database WHERE datname = current_database()
+      `);
+      const r = res.rows[0] || {};
+      return {
+        stats: {
+          select: Number(r.tup_returned || 0) + Number(r.tup_fetched || 0),
+          insert: Number(r.tup_inserted || 0),
+          update: Number(r.tup_updated || 0),
+          delete: Number(r.tup_deleted || 0),
+        },
+      };
+    }
+
+    if (entry.type === "mysql" || entry.type === "mariadb") {
+      const vars = ["Com_select", "Com_insert", "Com_update", "Com_delete"];
+      const [rows] = await entry.client.query(
+        `SHOW GLOBAL STATUS WHERE Variable_name IN (${vars.map(() => "?").join(",")})`,
+        vars
+      );
+      const map = {};
+      for (const r of rows) map[r.Variable_name] = parseInt(r.Value || 0);
+      return {
+        stats: {
+          select: map.Com_select || 0,
+          insert: map.Com_insert || 0,
+          update: map.Com_update || 0,
+          delete: map.Com_delete || 0,
+        },
+      };
+    }
+
+    if (entry.type === "mongodb") {
+      const info = await entry.client.db("admin").command({ serverStatus: 1 });
+      const ops = info.opcounters || {};
+      return {
+        stats: {
+          select: Number(ops.query || 0) + Number(ops.getmore || 0),
+          insert: Number(ops.insert || 0),
+          update: Number(ops.update || 0),
+          delete: Number(ops.delete || 0),
+        },
+      };
+    }
+
+    return { stats: null };
+  } catch (e) {
+    return { stats: null, error: e.message };
+  }
+});
+
 // ── KawaiiDB: explain query ─────────────────────────────────────────────────
 ipcMain.handle("kawaiidb:explain-query", async (_, { connectionId, sql }) => {
   const entry = _dbPools.get(connectionId);

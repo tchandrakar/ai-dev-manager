@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { T } from "../tokens";
 import { PanelHeader } from "../components";
 import { useKawaii } from "./KawaiiApp";
@@ -121,9 +121,21 @@ function TimePill({ label, active, onClick }) {
 
 // ── Query Performance Chart ──────────────────────────────────────────────────
 
-function QueryPerformanceChart() {
-  const [range, setRange] = useState("24H");
-  const ranges = ["1H", "6H", "24H", "7D"];
+function QueryPerformanceChart({ realMetrics }) {
+  const [range, setRange] = useState("Live");
+  const ranges = ["Live"];
+  const samplesRef = useRef([]);
+
+  // Accumulate real metric snapshots (keep last 60 = ~10 minutes at 10s intervals)
+  useEffect(() => {
+    if (realMetrics) {
+      samplesRef.current = [...samplesRef.current, {
+        queriesPerSec: realMetrics.queriesPerSec || 0,
+        avgQueryTime: realMetrics.avgQueryTime || 0,
+        ts: Date.now(),
+      }].slice(-60);
+    }
+  }, [realMetrics]);
 
   const chartW = 680;
   const chartH = 220;
@@ -134,42 +146,34 @@ function QueryPerformanceChart() {
   const drawW = chartW - padL - padR;
   const drawH = chartH - padT - padB;
 
-  const pointsMap = { "1H": 12, "6H": 24, "24H": 48, "7D": 56 };
-  const xLabelSets = {
-    "1H": ["0m", "10m", "20m", "30m", "40m", "50m", "Now"],
-    "6H": ["6h ago", "5h", "4h", "3h", "2h", "1h", "Now"],
-    "24H": ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "Now"],
-    "7D": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Now"],
-  };
-
-  const { avgData, p95Data } = useMemo(() => {
-    const numPoints = pointsMap[range] || 48;
-    const rng = seededRandom(range.charCodeAt(0) * 137);
-    const avg = generateChartData(
-      numPoints,
-      (t) => 0.3 + 0.15 * Math.sin(t * Math.PI * 2) + 0.1 * Math.sin(t * Math.PI * 4),
-      0.08 + rng() * 0.04,
-      1
-    );
-    const p95 = generateChartData(
-      numPoints,
-      (t) => 0.6 + 0.2 * Math.sin(t * Math.PI * 2 + 0.5) + 0.12 * Math.cos(t * Math.PI * 3),
-      0.12 + rng() * 0.05,
-      1
-    );
+  const { avgData, qpsData } = useMemo(() => {
+    const samples = samplesRef.current;
+    if (samples.length < 2) {
+      // Not enough real data yet — show flat line at current value
+      const val = realMetrics?.avgQueryTime || 0;
+      const qps = realMetrics?.queriesPerSec || 0;
+      return { avgData: Array(10).fill(val || 1), qpsData: Array(10).fill(qps || 1) };
+    }
     return {
-      avgData: avg.map((v) => v * 100 + 20),
-      p95Data: p95.map((v) => v * 150 + 50),
+      avgData: samples.map((s) => s.avgQueryTime),
+      qpsData: samples.map((s) => s.queriesPerSec),
     };
-  }, [range]);
+  }, [realMetrics]);
 
-  const maxVal = 200;
-  const yLabels = ["200ms", "150ms", "100ms", "50ms", "0ms"];
-  const xLabels = xLabelSets[range] || xLabelSets["24H"];
+  const maxVal = Math.max(10, ...avgData, ...qpsData.map((v) => v * 0.1)) * 1.2;
+  const yMax = Math.ceil(maxVal / 10) * 10;
+  const yLabels = [yMax, Math.round(yMax * 0.75), Math.round(yMax * 0.5), Math.round(yMax * 0.25), 0].map((v) => `${v}ms`);
 
-  const avgPath = dataToPath(avgData, drawW, drawH, maxVal, padL, padT);
-  const avgAreaPath = dataToAreaPath(avgData, drawW, drawH, maxVal, padL, padT);
-  const p95Path = dataToPath(p95Data, drawW, drawH, maxVal, padL, padT);
+  // Time labels for live mode
+  const numPts = avgData.length;
+  const xLabels = numPts <= 10
+    ? Array.from({ length: Math.min(7, numPts) }, (_, i) => i === Math.min(6, numPts - 1) ? "Now" : `${Math.round((numPts - 1 - i * (numPts / 7)) * 10)}s ago`).reverse()
+    : ["5m ago", "4m", "3m", "2m", "1m", "30s", "Now"];
+
+  const avgPath = dataToPath(avgData, drawW, drawH, yMax, padL, padT);
+  const avgAreaPath = dataToAreaPath(avgData, drawW, drawH, yMax, padL, padT);
+  const qpsScaled = qpsData.map((v) => v * 0.1); // scale qps to fit chart
+  const qpsPath = dataToPath(qpsScaled, drawW, drawH, yMax, padL, padT);
 
   return (
     <div
@@ -238,8 +242,8 @@ function QueryPerformanceChart() {
           {/* Avg line */}
           <path d={avgPath} fill="none" stroke={T.teal} strokeWidth={2} />
 
-          {/* P95 line (dashed) */}
-          <path d={p95Path} fill="none" stroke={T.amber} strokeWidth={1.5} strokeDasharray="6 4" />
+          {/* Queries/sec line (dashed, scaled) */}
+          <path d={qpsPath} fill="none" stroke={T.amber} strokeWidth={1.5} strokeDasharray="6 4" />
         </svg>
 
         {/* Legend */}
@@ -248,13 +252,13 @@ function QueryPerformanceChart() {
             <svg width={20} height={2}>
               <line x1={0} y1={1} x2={20} y2={1} stroke={T.teal} strokeWidth={2} />
             </svg>
-            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Avg Query Time</span>
+            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Avg Query Time (ms)</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <svg width={20} height={2}>
               <line x1={0} y1={1} x2={20} y2={1} stroke={T.amber} strokeWidth={1.5} strokeDasharray="4 3" />
             </svg>
-            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>p95 Latency</span>
+            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Queries/sec (scaled)</span>
           </div>
         </div>
       </div>
@@ -305,7 +309,7 @@ function DonutLegendRow({ type, pct, count, color }) {
 
 // ── Donut Chart: Queries by Type ─────────────────────────────────────────────
 
-function QueriesByTypeChart({ connectionCount }) {
+function QueriesByTypeChart({ queryStats }) {
   const radius = 70;
   const strokeW = 20;
   const circumference = 2 * Math.PI * radius;
@@ -313,23 +317,24 @@ function QueriesByTypeChart({ connectionCount }) {
   const cy = 100;
   const svgSize = 200;
 
-  // Simulate query type distribution based on connection count for variability
   const stats = useMemo(() => {
-    const rng = seededRandom(connectionCount * 31 + 7);
-    const selectPct = 48 + Math.floor(rng() * 10);
-    const insertPct = 18 + Math.floor(rng() * 8);
-    const updatePct = 12 + Math.floor(rng() * 8);
-    const deletePct = 3 + Math.floor(rng() * 5);
-    const otherPct = 100 - selectPct - insertPct - updatePct - deletePct;
-    const totalQueries = 1000 + Math.floor(rng() * 8000);
+    const s = queryStats || { select: 0, insert: 0, update: 0, delete: 0 };
+    const total = s.select + s.insert + s.update + s.delete;
+    if (total === 0) {
+      return [
+        { type: "SELECT", pct: 0, count: 0, color: T.blue },
+        { type: "INSERT", pct: 0, count: 0, color: T.green },
+        { type: "UPDATE", pct: 0, count: 0, color: T.amber },
+        { type: "DELETE", pct: 0, count: 0, color: T.red },
+      ];
+    }
     return [
-      { type: "SELECT", pct: selectPct, count: Math.round(totalQueries * selectPct / 100), color: T.blue },
-      { type: "INSERT", pct: insertPct, count: Math.round(totalQueries * insertPct / 100), color: T.green },
-      { type: "UPDATE", pct: updatePct, count: Math.round(totalQueries * updatePct / 100), color: T.amber },
-      { type: "DELETE", pct: deletePct, count: Math.round(totalQueries * deletePct / 100), color: T.red },
-      { type: "Other",  pct: otherPct,  count: Math.round(totalQueries * otherPct / 100),  color: T.purple },
+      { type: "SELECT", pct: Math.round(s.select / total * 100), count: s.select, color: T.blue },
+      { type: "INSERT", pct: Math.round(s.insert / total * 100), count: s.insert, color: T.green },
+      { type: "UPDATE", pct: Math.round(s.update / total * 100), count: s.update, color: T.amber },
+      { type: "DELETE", pct: Math.round(s.delete / total * 100), count: s.delete, color: T.red },
     ];
-  }, [connectionCount]);
+  }, [queryStats]);
 
   const totalQueries = useMemo(() => stats.reduce((sum, s) => sum + s.count, 0), [stats]);
   const totalLabel = totalQueries >= 1000 ? `${(totalQueries / 1000).toFixed(1)}K` : String(totalQueries);
@@ -709,8 +714,11 @@ function ScreenDashboard() {
   // Fetch real server metrics via IPC
   const [realServerInfo, setRealServerInfo] = useState(null);
 
+  // Fetch real query stats (for donut chart)
+  const [queryStats, setQueryStats] = useState(null);
+
   useEffect(() => {
-    if (!activeConnection) { setRealServerInfo(null); return; }
+    if (!activeConnection) { setRealServerInfo(null); setQueryStats(null); return; }
     let cancelled = false;
     const fetchInfo = async () => {
       try {
@@ -718,9 +726,17 @@ function ScreenDashboard() {
         if (!cancelled && info && !info.error) setRealServerInfo(info);
       } catch {}
     };
+    const fetchStats = async () => {
+      try {
+        const result = await window.akatsuki.kawaiidb.getQueryStats({ connectionId: activeConnection.id });
+        if (!cancelled && result && result.stats) setQueryStats(result.stats);
+      } catch {}
+    };
     fetchInfo();
+    fetchStats();
     const interval = setInterval(fetchInfo, 10000); // Poll every 10s
-    return () => { cancelled = true; clearInterval(interval); };
+    const statsInterval = setInterval(fetchStats, 15000); // Poll every 15s
+    return () => { cancelled = true; clearInterval(interval); clearInterval(statsInterval); };
   }, [activeConnection?.id]);
 
   // Derive metrics from real data or fallback to seeded random
@@ -824,8 +840,8 @@ function ScreenDashboard() {
 
       {/* ── Charts Row 1 ───────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <QueryPerformanceChart />
-        <QueriesByTypeChart connectionCount={connectionCount} />
+        <QueryPerformanceChart realMetrics={realServerInfo?.metrics} />
+        <QueriesByTypeChart queryStats={queryStats} />
       </div>
 
       {/* ── Charts Row 2 ───────────────────────────────────────────── */}

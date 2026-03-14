@@ -342,6 +342,17 @@ function KawaiiApp({ initialTab, onNavigate }) {
   const [navigatorView, setNavigatorView] = useState("editor");
   const [activeTable, setActiveTable] = useState(null);
 
+  // Schema cache — fetched when activeConnection changes, shared across all screens
+  const [schema, setSchema] = useState(null); // { tables, views, storedProcedures, functions }
+  useEffect(() => {
+    if (!activeConnection || activeConnection.status !== "online") { setSchema(null); return; }
+    let cancelled = false;
+    window.akatsuki.kawaiidb.fetchSchema({ connectionId: activeConnection.id })
+      .then((s) => { if (!cancelled && s && !s.error) setSchema(s); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeConnection?.id, activeConnection?.status]);
+
   // Cross-screen state: AI Analyze initial SQL (set by History, consumed by AI Analyze)
   const [aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL] = useState(null);
 
@@ -384,6 +395,7 @@ function KawaiiApp({ initialTab, onNavigate }) {
       addSqlTab,
       connections,
       setConnections,
+      schema,
       aiAnalyzeInitialSQL,
       setAiAnalyzeInitialSQL,
     }),
@@ -399,6 +411,7 @@ function KawaiiApp({ initialTab, onNavigate }) {
       activeSqlTab,
       addSqlTab,
       connections,
+      schema,
       aiAnalyzeInitialSQL,
     ]
   );

@@ -6,7 +6,7 @@ import { DB_TYPES } from "./mockData";
 import { addAnalysisToHistory } from "./ScreenHistory";
 
 // ── SQL Syntax Highlighter (shared) ─────────────────────────────────────────
-const SQL_KEYWORDS = new Set([
+export const SQL_KEYWORDS = new Set([
   "SELECT","FROM","WHERE","AND","OR","NOT","IN","ON","AS","JOIN","LEFT","RIGHT",
   "INNER","OUTER","CROSS","FULL","GROUP","BY","ORDER","HAVING","LIMIT","OFFSET",
   "INSERT","INTO","UPDATE","SET","DELETE","CREATE","ALTER","DROP","TABLE","INDEX",
@@ -17,7 +17,7 @@ const SQL_KEYWORDS = new Set([
   "CONCAT","CAST","CONVERT","DATE","NOW","REPLACE","SUBSTRING","TRIM","LENGTH",
 ]);
 
-const SQL_FUNCTIONS = new Set([
+export const SQL_FUNCTIONS = new Set([
   "COUNT","SUM","AVG","MIN","MAX","COALESCE","CONCAT","CAST","CONVERT","DATE",
   "NOW","REPLACE","SUBSTRING","TRIM","LENGTH","UPPER","LOWER","ROUND","FLOOR",
   "CEIL","ABS","IFNULL","NULLIF","GROUP_CONCAT","ROW_NUMBER","RANK","DENSE_RANK",

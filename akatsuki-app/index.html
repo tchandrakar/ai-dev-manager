@@ -78,6 +78,7 @@
               {pid:12847,user:"app_user",db:"ecommerce_prod",query:"SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at",duration:"2s",state:"active"},
               {pid:12901,user:"analytics",db:"ecommerce_prod",query:"SELECT DATE(created_at), SUM(total) FROM orders GROUP BY 1",duration:"8s",state:"active"},
             ]}), 200)),
+            getQueryStats: () => new Promise(resolve => setTimeout(() => resolve({stats:{select:84320,insert:12450,update:7230,delete:1890}}), 200)),
             explainQuery: () => new Promise(resolve => setTimeout(() => resolve({plan:[
               {table:"orders",type:"ALL",rows:"~8432",key:null,extra:"Using where; Using filesort"},
               {table:"users",type:"ref",rows:"~1",key:"PRIMARY",extra:"Using index"},

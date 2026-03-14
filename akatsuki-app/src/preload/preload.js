@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld("akatsuki", {
     fetchTableData: (opts) => ipcRenderer.invoke("kawaiidb:fetch-table-data", opts),
     getServerInfo: (opts) => ipcRenderer.invoke("kawaiidb:get-server-info", opts),
     getActiveQueries: (opts) => ipcRenderer.invoke("kawaiidb:get-active-queries", opts),
+    getQueryStats: (opts) => ipcRenderer.invoke("kawaiidb:get-query-stats", opts),
     explainQuery: (opts) => ipcRenderer.invoke("kawaiidb:explain-query", opts),
   },
 
