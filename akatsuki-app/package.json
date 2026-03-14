@@ -7,7 +7,8 @@
     "start": "electron-forge start",
     "dev": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "install-app": "electron-forge package && APP=$(find out -name 'Akatsuki.app' -maxdepth 3 | head -1) && rm -rf '/Applications/Akatsuki.app' && cp -r \"$APP\" /Applications/ && echo '✓ Installed to /Applications/Akatsuki.app'"
   },
   "author": "tchandrakar",
   "license": "MIT",
