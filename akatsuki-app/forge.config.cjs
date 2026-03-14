@@ -65,6 +65,7 @@ module.exports = {
         "mongodb",         // MongoDB
         "ioredis",         // Redis
         "mssql",           // SQL Server
+        "ssh2",            // SSH tunneling
       ];
 
       // Collect all transitive dependencies
