@@ -110,7 +110,7 @@ function PreviewLine({ lineNum, text, isHighlighted, query }) {
 }
 
 // ── ResultItem ──────────────────────────────────────────────────────────────
-function ResultItem({ item, query, isSelected, onClick }) {
+function ResultItem({ item, query, isSelected, onClick, flatIdx }) {
   const [hov, setHov] = useState(false);
   const filename = item.file.split("/").pop();
   const dir = item.file.split("/").slice(0, -1).join("/");
@@ -142,6 +142,7 @@ function ResultItem({ item, query, isSelected, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
+      data-result-idx={flatIdx}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -238,7 +239,7 @@ function ResultItem({ item, query, isSelected, onClick }) {
 }
 
 // ── ResultGroup ─────────────────────────────────────────────────────────────
-function ResultGroup({ filePath, items, query, selectedItem, onSelect }) {
+function ResultGroup({ filePath, items, query, selectedItem, onSelect, startFlatIdx, selectedIdx }) {
   const [collapsed, setCollapsed] = useState(false);
   const filename = filePath.split("/").pop();
   const color = extColor(filename);
@@ -280,22 +281,26 @@ function ResultGroup({ filePath, items, query, selectedItem, onSelect }) {
 
       {/* Items */}
       {!collapsed &&
-        items.map((item, idx) => (
-          <ResultItem
-            key={`${item.file}:${item.line ?? idx}`}
-            item={item}
-            query={query}
-            isSelected={selectedItem && selectedItem.file === item.file && selectedItem.line === item.line}
-            onClick={() => onSelect(item)}
-          />
-        ))}
+        items.map((item, idx) => {
+          const fi = (startFlatIdx ?? 0) + idx;
+          return (
+            <ResultItem
+              key={`${item.file}:${item.line ?? idx}`}
+              item={item}
+              query={query}
+              flatIdx={fi}
+              isSelected={selectedIdx === fi || (selectedItem && selectedItem.file === item.file && selectedItem.line === item.line)}
+              onClick={() => onSelect(item, fi)}
+            />
+          );
+        })}
     </div>
   );
 }
 
 // ── Main ScreenSearch ───────────────────────────────────────────────────────
 function ScreenSearch() {
-  const { workingDir, openFiles, setOpenFiles, setActiveFile, setActiveTab } = useShinra();
+  const { workingDir, openFiles, setOpenFiles, setActiveFile, setActiveTab, searchOpen, setSearchOpen } = useShinra();
 
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -303,17 +308,53 @@ function ScreenSearch() {
   const [loading, setLoading] = useState(false);
   const [searchTime, setSearchTime] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedIdx, setSelectedIdx] = useState(-1);
   const [previewContent, setPreviewContent] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
   const previewRef = useRef(null);
+  const resultsRef = useRef(null);
 
-  // Auto-focus the search input on mount
+  // Auto-focus on mount and whenever searchOpen flips to true
   useEffect(() => {
     if (inputRef.current) inputRef.current.focus();
   }, []);
+
+  useEffect(() => {
+    if (searchOpen && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+      if (setSearchOpen) setSearchOpen(false); // reset flag after consuming
+    }
+  }, [searchOpen, setSearchOpen]);
+
+  // Flat results list for arrow-key navigation
+  const flatResults = useMemo(() => results, [results]);
+
+  // Sync selectedItem with selectedIdx
+  useEffect(() => {
+    if (selectedIdx >= 0 && selectedIdx < flatResults.length) {
+      setSelectedItem(flatResults[selectedIdx]);
+      // Scroll result into view
+      if (resultsRef.current) {
+        const el = resultsRef.current.querySelector(`[data-result-idx="${selectedIdx}"]`);
+        if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [selectedIdx, flatResults]);
+
+  // Escape → go back to editor
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        setActiveTab("editor");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [setActiveTab]);
 
   // ── Walk directory tree for file-name search ────────────────────────────
   const walkForFiles = useCallback(async (dir, q, maxDepth = 8, maxResults = 100) => {
@@ -575,7 +616,19 @@ function ScreenSearch() {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setSelectedIdx(-1); }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSelectedIdx((i) => Math.min(i + 1, flatResults.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSelectedIdx((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter") {
+                const item = selectedIdx >= 0 ? flatResults[selectedIdx] : flatResults[0];
+                if (item) openInEditor(item);
+              }
+            }}
             placeholder="Search files, content, symbols, functions..."
             style={{
               width: "100%",
@@ -653,7 +706,7 @@ function ScreenSearch() {
           )}
 
           {/* Results body */}
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div ref={resultsRef} style={{ flex: 1, overflowY: "auto" }}>
             {/* Loading state */}
             {loading && results.length === 0 && (
               <div
@@ -710,18 +763,28 @@ function ScreenSearch() {
             )}
 
             {/* Grouped results */}
-            {grouped.map(([filePath, items]) => (
-              <ResultGroup
-                key={filePath}
-                filePath={filePath}
-                items={items}
-                query={query}
-                selectedItem={selectedItem}
-                onSelect={(item) => {
-                  setSelectedItem(item);
-                }}
-              />
-            ))}
+            {(() => {
+              let flatIdx = 0;
+              return grouped.map(([filePath, items]) => {
+                const startIdx = flatIdx;
+                flatIdx += items.length;
+                return (
+                  <ResultGroup
+                    key={filePath}
+                    filePath={filePath}
+                    items={items}
+                    query={query}
+                    selectedItem={selectedItem}
+                    startFlatIdx={startIdx}
+                    selectedIdx={selectedIdx}
+                    onSelect={(item, idx) => {
+                      setSelectedItem(item);
+                      setSelectedIdx(idx);
+                    }}
+                  />
+                );
+              });
+            })()}
           </div>
         </div>
 

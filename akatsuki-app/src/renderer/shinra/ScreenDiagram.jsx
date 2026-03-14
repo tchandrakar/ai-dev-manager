@@ -295,11 +295,11 @@ function findCycles(nodes, edges) {
 
 // ── Named sub-components ─────────────────────────────────────────────────────
 
-function GraphNode({ node, pos, isSelected, isInCycle, onClick, onMouseDown }) {
+function GraphNode({ node, pos, isSelected, isInCycle, isHovered, onClick, onMouseDown, onHover }) {
   const { color } = categorize(node.id);
   const name = node.name;
-  const borderColor = isSelected ? T.blue : isInCycle ? T.red : `${color}60`;
-  const bgColor = isSelected ? `${T.blue}18` : isInCycle ? `${T.red}10` : `${color}10`;
+  const borderColor = isHovered ? T.blue : isSelected ? T.blue : isInCycle ? T.red : `${color}60`;
+  const bgColor = isHovered ? `${T.blue}22` : isSelected ? `${T.blue}18` : isInCycle ? `${T.red}10` : `${color}10`;
 
   return (
     <g
@@ -307,6 +307,8 @@ function GraphNode({ node, pos, isSelected, isInCycle, onClick, onMouseDown }) {
       style={{ cursor: "pointer" }}
       onClick={(e) => { e.stopPropagation(); onClick(node.id); }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
+      onMouseEnter={() => onHover(node.id)}
+      onMouseLeave={() => onHover(null)}
     >
       <rect
         x={-NODE_W / 2}
@@ -354,7 +356,7 @@ function GraphNode({ node, pos, isSelected, isInCycle, onClick, onMouseDown }) {
   );
 }
 
-function GraphEdge({ from, to, isInCycle }) {
+function GraphEdge({ from, to, isInCycle, highlighted }) {
   if (!from || !to) return null;
 
   const x1 = from.x;
@@ -366,21 +368,25 @@ function GraphEdge({ from, to, isInCycle }) {
   const midY = (y1 + y2) / 2;
   const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
 
+  const strokeColor = isInCycle ? T.red : highlighted ? T.blue : T.border2;
+  const strokeWidth = highlighted ? 2 : isInCycle ? 1.5 : 1;
+  const opacity = highlighted ? 1 : isInCycle ? 0.9 : 0.5;
+
   return (
     <g>
       <path
         d={d}
         fill="none"
-        stroke={isInCycle ? T.red : T.border2}
-        strokeWidth={isInCycle ? 1.5 : 1}
+        stroke={strokeColor}
+        strokeWidth={strokeWidth}
         strokeDasharray={isInCycle ? "4 3" : "none"}
-        opacity={isInCycle ? 0.9 : 0.5}
+        opacity={opacity}
       />
       {/* Arrowhead */}
       <polygon
         points={`${x2 - 4},${y2 - 7} ${x2},${y2} ${x2 + 4},${y2 - 7}`}
-        fill={isInCycle ? T.red : T.border2}
-        opacity={isInCycle ? 0.9 : 0.5}
+        fill={strokeColor}
+        opacity={opacity}
       />
     </g>
   );
@@ -509,6 +515,7 @@ export default function ScreenDiagram() {
 
   // UI state
   const [selectedNode, setSelectedNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
   const [positions, setPositions] = useState([]); // [{id, x, y}]
 
   // Pan / zoom
@@ -1042,14 +1049,19 @@ export default function ScreenDiagram() {
             {/* Transformed group */}
             <g transform={`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`}>
               {/* Edges */}
-              {graph.edges.map((edge, i) => (
-                <GraphEdge
-                  key={`${edge.from}|${edge.to}|${i}`}
-                  from={posMap[edge.from]}
-                  to={posMap[edge.to]}
-                  isInCycle={cycleEdgeSet.has(`${edge.from}|${edge.to}`)}
-                />
-              ))}
+              {graph.edges.map((edge, i) => {
+                const isConnectedToHovered = hoveredNode && (edge.from === hoveredNode || edge.to === hoveredNode);
+                const isConnectedToSelected = selectedNode && (edge.from === selectedNode || edge.to === selectedNode);
+                return (
+                  <GraphEdge
+                    key={`${edge.from}|${edge.to}|${i}`}
+                    from={posMap[edge.from]}
+                    to={posMap[edge.to]}
+                    isInCycle={cycleEdgeSet.has(`${edge.from}|${edge.to}`)}
+                    highlighted={isConnectedToHovered || isConnectedToSelected}
+                  />
+                );
+              })}
 
               {/* Nodes */}
               {graph.nodes.map(node => {
@@ -1061,9 +1073,11 @@ export default function ScreenDiagram() {
                     node={node}
                     pos={pos}
                     isSelected={selectedNode === node.id}
+                    isHovered={hoveredNode === node.id}
                     isInCycle={cycleNodeSet.has(node.id)}
                     onClick={setSelectedNode}
                     onMouseDown={handleNodeMouseDown}
+                    onHover={setHoveredNode}
                   />
                 );
               })}

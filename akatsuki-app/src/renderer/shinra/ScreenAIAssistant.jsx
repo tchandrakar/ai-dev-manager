@@ -541,7 +541,7 @@ function ScreenAIAssistant() {
     }
   }, [sending, selectedAgent, aiHistory, setAiHistory, buildSystemPrompt]);
 
-  // Handle action tab click
+  // Handle action tab click — keep active tab, show spinner inline
   const handleActionClick = useCallback((key) => {
     setActiveAction(key);
     if (key !== "chat") {
@@ -550,12 +550,12 @@ function ScreenAIAssistant() {
           ...prev,
           { role: "assistant", content: "No file is currently open. Please open a file first to use this action.", ts: Date.now() },
         ]);
+        setActiveAction("chat");
         return;
       }
       const prompt = ACTION_PROMPTS[key];
-      sendMessage(prompt);
-      // Switch back to chat to show the response
-      setActiveAction("chat");
+      // Send and only switch to chat tab AFTER response arrives
+      sendMessage(prompt).finally(() => setActiveAction("chat"));
     }
   }, [activeFile, fileContent, sendMessage, setAiHistory]);
 
@@ -568,13 +568,28 @@ function ScreenAIAssistant() {
     sendMessage(msg);
   }, [input, sending, sendMessage]);
 
-  // Handle keydown in textarea
+  // Handle keydown in textarea — ⌘/Ctrl+Enter sends, Shift+Enter = newline, Enter = send
   const handleKeyDown = useCallback((e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      handleSubmit();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
+    // Shift+Enter: allow natural newline (no prevention needed)
   }, [handleSubmit]);
+
+  // Auto-grow textarea on input change
+  const handleInputChange = useCallback((e) => {
+    setInput(e.target.value);
+    // Auto-grow height
+    const ta = e.target;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+  }, []);
 
   // Clear chat
   const handleClear = useCallback(() => {
@@ -969,14 +984,14 @@ function ScreenAIAssistant() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={
                 activeFile
-                  ? `Ask about ${fileName}...`
-                  : "Ask anything..."
+                  ? `Ask about ${fileName}... (⌘Enter to send)`
+                  : "Ask anything... (⌘Enter to send)"
               }
-              rows={2}
+              rows={1}
               disabled={sending}
               style={{
                 flex: 1,
@@ -990,6 +1005,9 @@ function ScreenAIAssistant() {
                 outline: "none",
                 resize: "none",
                 lineHeight: "18px",
+                minHeight: 36,
+                maxHeight: 160,
+                overflow: "auto",
                 opacity: sending ? 0.5 : 1,
               }}
             />
@@ -1014,7 +1032,7 @@ function ScreenAIAssistant() {
             marginTop: 4,
           }}>
             <span style={{ fontSize: 9, color: T.txt3 }}>
-              Shift+Enter for new line
+              ⌘Enter to send · Shift+Enter for new line
             </span>
             {selectedAgent && (
               <span style={{ fontSize: 9, color: T.txt3 }}>

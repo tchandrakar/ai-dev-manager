@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { T } from "../tokens";
 import { Btn, PanelHeader, Badge, Input, Toggle } from "../components";
 import { useShinra } from "./ShinraApp";
@@ -447,6 +447,18 @@ function ScreenPlugins() {
     if (!selectedId) return null;
     return plugins.find(p => p.id === selectedId) || null;
   }, [plugins, selectedId]);
+
+  // Escape closes detail panel / add form
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        if (showAddForm) setShowAddForm(false);
+        else if (selectedId) setSelectedId(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedId, showAddForm]);
 
   // Actions
   const toggleInstall = useCallback((id) => {

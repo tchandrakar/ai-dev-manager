@@ -357,7 +357,12 @@ function Minimap({ lines, scrollTop, visibleLines, totalHeight, onSeek }) {
 
 // ── Main ScreenEditor ───────────────────────────────────────────────────────
 function ScreenEditor() {
-  const { workingDir, setWorkingDir, openFiles, setOpenFiles, activeFile, setActiveFile } = useShinra();
+  const {
+    workingDir, setWorkingDir,
+    openFiles, setOpenFiles,
+    activeFile, setActiveFile,
+    filePaletteOpen, setFilePaletteOpen,
+  } = useShinra();
 
   // File tree state
   const [treeEntries, setTreeEntries] = useState([]);
@@ -483,6 +488,27 @@ function ScreenEditor() {
     }));
   }, [activeFile]);
 
+  // ── Scroll parent to keep textarea cursor in view ─────────────────────────
+  const handleEditorKeyDown = useCallback((e) => {
+    // After key press, check if we need to scroll to keep cursor visible
+    setTimeout(() => {
+      const textarea = e.target;
+      const scrollEl = editorRef.current;
+      if (!textarea || !scrollEl) return;
+      const cursorPos = textarea.selectionStart;
+      const textBefore = (textarea.value || "").slice(0, cursorPos);
+      const linesBefore = textBefore.split("\n").length - 1;
+      const cursorY = linesBefore * 20; // 20px per line
+      const viewTop = scrollEl.scrollTop;
+      const viewBottom = viewTop + scrollEl.clientHeight;
+      if (cursorY < viewTop + 40) {
+        scrollEl.scrollTop = Math.max(0, cursorY - 40);
+      } else if (cursorY + 24 > viewBottom - 40) {
+        scrollEl.scrollTop = cursorY + 64 - scrollEl.clientHeight;
+      }
+    }, 0);
+  }, []);
+
   // ── Save file (Cmd+S) ────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!activeFile || !fileContents[activeFile]) return;
@@ -503,17 +529,66 @@ function ScreenEditor() {
     setSaving(false);
   }, [activeFile, fileContents]);
 
-  // ── Keyboard shortcut ─────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      const mod = e.metaKey || e.ctrlKey;
+
+      // ⌘S — save
+      if (mod && e.key === "s" && !e.shiftKey) {
         e.preventDefault();
         handleSave();
+        return;
+      }
+
+      // ⌘W — close active tab
+      if (mod && e.key === "w") {
+        e.preventDefault();
+        if (activeFile) handleCloseTab(activeFile);
+        return;
+      }
+
+      // ⌘1-9 — switch to tab by index
+      if (mod && e.key >= "1" && e.key <= "9") {
+        const idx = parseInt(e.key, 10) - 1;
+        if (openFiles[idx]) {
+          e.preventDefault();
+          setActiveFile(openFiles[idx]);
+        }
+        return;
+      }
+
+      // Ctrl+` — toggle terminal
+      if (e.ctrlKey && e.key === "`") {
+        e.preventDefault();
+        setTermOpen((p) => !p);
+        return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSave]);
+  }, [handleSave, handleCloseTab, activeFile, openFiles, setActiveFile]);
+
+  // ── File palette (⌘P): focus input when triggered ─────────────────────────
+  const fileSearchRef = useRef(null);
+  const [fileSearchQuery, setFileSearchQuery] = useState("");
+  const [fileSearchOpen, setFileSearchOpen] = useState(false);
+
+  useEffect(() => {
+    if (filePaletteOpen) {
+      setFileSearchOpen(true);
+      setFilePaletteOpen(false);
+      setTimeout(() => fileSearchRef.current?.focus(), 50);
+    }
+  }, [filePaletteOpen, setFilePaletteOpen]);
+
+  // Flat list of all opened + recently seen files for palette
+  const paletteFiles = useMemo(() => openFiles, [openFiles]);
+  const filteredPalette = useMemo(() => {
+    if (!fileSearchQuery.trim()) return paletteFiles;
+    const q = fileSearchQuery.toLowerCase();
+    return paletteFiles.filter((fp) => fp.toLowerCase().includes(q));
+  }, [paletteFiles, fileSearchQuery]);
 
   // ── Track editor scroll for minimap ───────────────────────────────────────
   useEffect(() => {
@@ -531,11 +606,11 @@ function ScreenEditor() {
     };
   }, [activeFile]);
 
-  // ── Minimap seek ──────────────────────────────────────────────────────────
+  // ── Minimap seek (smooth) ─────────────────────────────────────────────────
   const handleMinimapSeek = useCallback((lineIdx) => {
     const el = editorRef.current;
     if (!el) return;
-    el.scrollTop = lineIdx * 20; // 20px per line
+    el.scrollTo({ top: lineIdx * 20, behavior: "smooth" });
   }, []);
 
   // ── Persistent shell session ──────────────────────────────────────────────
@@ -688,7 +763,7 @@ function ScreenEditor() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+    <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
       {/* ── File Tree Sidebar ──────────────────────────────────────────── */}
       <div style={{
         width: 240,
@@ -886,6 +961,7 @@ function ScreenEditor() {
                   <textarea
                     value={activeContent}
                     onChange={handleContentChange}
+                    onKeyDown={handleEditorKeyDown}
                     spellCheck={false}
                     style={{
                       position: "absolute",
@@ -1072,6 +1148,86 @@ function ScreenEditor() {
           )}
         </div>
       </div>
+
+      {/* ── ⌘P File Palette Overlay ──────────────────────────────────────── */}
+      {fileSearchOpen && (
+        <div
+          onClick={() => setFileSearchOpen(false)}
+          style={{
+            position: "absolute", inset: 0, zIndex: 100,
+            background: "rgba(7,11,20,0.7)",
+            display: "flex", alignItems: "flex-start", justifyContent: "center",
+            paddingTop: 80,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 560, maxHeight: 400,
+              background: T.bg1, border: `1px solid ${T.border2}`,
+              borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column",
+              boxShadow: "0 24px 48px rgba(0,0,0,0.6)",
+            }}
+          >
+            <div style={{ padding: "0 12px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 8, height: 42 }}>
+              <span style={{ color: T.txt3, fontSize: 13 }}>⌘P</span>
+              <input
+                ref={fileSearchRef}
+                value={fileSearchQuery}
+                onChange={(e) => setFileSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setFileSearchOpen(false); setFileSearchQuery(""); }
+                  if (e.key === "Enter" && filteredPalette.length > 0) {
+                    setActiveFile(filteredPalette[0]);
+                    setFileSearchOpen(false); setFileSearchQuery("");
+                  }
+                }}
+                placeholder="Search open files..."
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  color: T.txt, fontSize: 13, fontFamily: T.fontUI,
+                }}
+              />
+              <span
+                onClick={() => { setFileSearchOpen(false); setFileSearchQuery(""); }}
+                style={{ color: T.txt3, cursor: "pointer", fontSize: 11, padding: "2px 6px", borderRadius: 4, background: T.bg3 }}
+              >
+                Esc
+              </span>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {filteredPalette.length === 0 ? (
+                <div style={{ padding: "20px 16px", color: T.txt3, fontSize: 12, fontFamily: T.fontUI, textAlign: "center" }}>
+                  {openFiles.length === 0 ? "No files open" : "No match"}
+                </div>
+              ) : (
+                filteredPalette.map((fp) => {
+                  const name = fp.split("/").pop();
+                  const dir = fp.replace(workingDir || "", "");
+                  const meta = getExtMeta(name);
+                  return (
+                    <div
+                      key={fp}
+                      onClick={() => { setActiveFile(fp); setFileSearchOpen(false); setFileSearchQuery(""); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, padding: "7px 16px",
+                        cursor: "pointer", background: fp === activeFile ? `${T.blue}14` : "transparent",
+                        borderLeft: fp === activeFile ? `2px solid ${T.blue}` : "2px solid transparent",
+                      }}
+                      onMouseEnter={(e) => { if (fp !== activeFile) e.currentTarget.style.background = T.bg3; }}
+                      onMouseLeave={(e) => { if (fp !== activeFile) e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: 700, color: meta.color, fontFamily: T.fontMono, width: 20, textAlign: "center" }}>{meta.icon}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: T.txt, fontFamily: T.fontUI }}>{name}</span>
+                      <span style={{ fontSize: 10, color: T.txt3, fontFamily: T.fontMono, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dir}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

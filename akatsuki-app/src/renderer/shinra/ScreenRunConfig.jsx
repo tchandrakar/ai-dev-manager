@@ -371,7 +371,7 @@ export default function ScreenRunConfig() {
     return parts.join(" ");
   }, []);
 
-  // ── Run config ────────────────────────────────────────────────────────────
+  // ── Run config — with live streaming output ───────────────────────────────
   const runConfig = useCallback(
     async (cfg) => {
       if (!cfg) return;
@@ -379,46 +379,97 @@ export default function ScreenRunConfig() {
       setRunOutput({ stdout: "", stderr: "", exitCode: null, running: true });
       setActiveConfig(cfg.id);
 
+      const cwd = cfg.cwd || workingDir || undefined;
+
       try {
-        // Execute pre-launch tasks sequentially
+        // Execute pre-launch tasks sequentially (quick, no stream needed)
         for (const task of cfg.preLaunchTasks) {
           if (!task.command || !task.command.trim()) continue;
           const taskResult = await window.akatsuki.shinra.runCommand({
             cmd: task.command,
-            cwd: cfg.cwd || workingDir || undefined,
+            cwd,
           });
+          setRunOutput((prev) => ({
+            ...prev,
+            stdout: prev.stdout + `[pre-launch] ${task.command}\n${taskResult.stdout || ""}`,
+            stderr: prev.stderr + (taskResult.stderr || ""),
+          }));
           if (taskResult.exitCode !== 0) {
-            setRunOutput({
-              stdout: taskResult.stdout,
-              stderr: `Pre-launch task "${task.command}" failed:\n${taskResult.stderr}`,
+            setRunOutput((prev) => ({
+              ...prev,
+              stderr: prev.stderr + `\nPre-launch task "${task.command}" failed (exit ${taskResult.exitCode})\n`,
               exitCode: taskResult.exitCode,
               running: false,
-            });
+            }));
             setRunning(false);
             return;
           }
         }
 
-        // Run the main command
-        const cmd = buildCommand(cfg);
-        const result = await window.akatsuki.shinra.runCommand({
-          cmd,
-          cwd: cfg.cwd || workingDir || undefined,
+        // Destroy any previous shell, register streaming listeners
+        try {
+          await window.akatsuki.shinra.shellDestroy();
+          window.akatsuki.shinra.removeShellListeners();
+        } catch {}
+
+        window.akatsuki.shinra.onShellStdout((data) => {
+          setRunOutput((prev) => ({ ...prev, stdout: prev.stdout + data }));
         });
-        setRunOutput({ ...result, running: false });
+        window.akatsuki.shinra.onShellStderr((data) => {
+          setRunOutput((prev) => ({ ...prev, stderr: prev.stderr + data }));
+        });
+        window.akatsuki.shinra.onShellExit((code) => {
+          setRunOutput((prev) => ({ ...prev, exitCode: code, running: false }));
+          setRunning(false);
+          window.akatsuki.shinra.removeShellListeners();
+        });
+
+        // Start shell and send command
+        const shellRes = await window.akatsuki.shinra.shellCreate({ cwd });
+        if (!shellRes.ok) throw new Error("Shell failed to start");
+
+        const cmd = buildCommand(cfg);
+        setRunOutput((prev) => ({ ...prev, stdout: prev.stdout + `$ ${cmd}\n` }));
+        window.akatsuki.shinra.shellWrite(cmd + "\n");
+
+        // Shell exits will fire onShellExit; timeout safety fallback (30s)
+        setTimeout(() => {
+          setRunning((r) => {
+            if (r) {
+              window.akatsuki.shinra.shellDestroy();
+              window.akatsuki.shinra.removeShellListeners();
+              setRunOutput((prev) => ({ ...prev, running: false, stderr: prev.stderr + "\n[Timeout: process killed after 30s]\n" }));
+            }
+            return false;
+          });
+        }, 30000);
+
       } catch (err) {
-        setRunOutput({
-          stdout: "",
-          stderr: `Error: ${err.message || "Unknown error"}`,
+        setRunOutput((prev) => ({
+          ...prev,
+          stderr: prev.stderr + `\nError: ${err.message || "Unknown error"}\n`,
           exitCode: 1,
           running: false,
-        });
-      } finally {
+        }));
         setRunning(false);
       }
     },
     [buildCommand, workingDir, setActiveConfig]
   );
+
+  // ── ⌘R — run selected config ──────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "r" && !e.shiftKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        if (selected && !running) runConfig(selected);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selected, running, runConfig]);
 
   // ── Group configs by type ─────────────────────────────────────────────────
   const grouped = CONFIG_TYPES.map((typeDef) => ({

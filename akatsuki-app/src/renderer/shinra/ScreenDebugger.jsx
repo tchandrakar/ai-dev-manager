@@ -601,6 +601,62 @@ function ScreenDebugger() {
     setTimeout(() => handleRun(), 100);
   }, [handleStop, handleRun]);
 
+  // ── Debugger keyboard shortcuts (F5/F10/F11) ─────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      // Only intercept when the debugger screen is active (no text inputs focused)
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.key === "F5") {
+        e.preventDefault();
+        if (e.shiftKey) { handleStop(); }
+        else if (isRunning) { handlePauseResume(); }
+        else { handleRun(); }
+      } else if (e.key === "F10") {
+        e.preventDefault();
+        handleStepOver();
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        if (e.shiftKey) { handleStepOut(); }
+        else { handleStepInto(); }
+      } else if (e.key === "F6") {
+        e.preventDefault();
+        handlePauseResume();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isRunning, handleRun, handleStop, handlePauseResume, handleStepOver, handleStepInto, handleStepOut]);
+
+  // ── Watch expression eval ─────────────────────────────────────────────────
+  const evaluateWatch = useCallback(async (expr) => {
+    if (!workingDir) return "—";
+    try {
+      const result = await window.akatsuki.shinra.runCommand({
+        cmd: `node -e "console.log(JSON.stringify(${expr}))"`,
+        cwd: workingDir,
+      });
+      return result.stdout?.trim() || result.stderr?.trim() || "undefined";
+    } catch {
+      return "error";
+    }
+  }, [workingDir]);
+
+  const evalAllWatches = useCallback(async () => {
+    const updated = await Promise.all(
+      watches.map(async (w) => ({ ...w, value: await evaluateWatch(w.expression) }))
+    );
+    setWatches(updated);
+  }, [watches, evaluateWatch]);
+
+  // Auto-eval watches when paused
+  useEffect(() => {
+    if (isPaused && watches.length > 0) {
+      evalAllWatches();
+    }
+  }, [isPaused]);
+
   // ── Console eval ──────────────────────────────────────────────────────────
   const handleConsoleSubmit = useCallback(async (e) => {
     e.preventDefault();

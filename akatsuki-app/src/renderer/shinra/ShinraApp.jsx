@@ -208,9 +208,74 @@ function ShinraApp({ initialTab, onNavigate }) {
   // Search state (shared for Search Everywhere overlay)
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // File palette open (Cmd+P)
+  const [filePaletteOpen, setFilePaletteOpen] = useState(false);
+
   // AI chat history
   const [aiHistory, setAiHistory] = useState(() => loadJSON("ai-history", []));
-  useEffect(() => { saveJSON("ai-history", aiHistory); }, [aiHistory]);
+  useEffect(() => {
+    saveJSON("ai-history", aiHistory.slice(-100));
+  }, [aiHistory]);
+
+  // ── App-wide keyboard shortcuts ──────────────────────────────────────────
+  const lastShiftRef = useRef(0);
+  useEffect(() => {
+    const handler = (e) => {
+      // ⇧⇧ double-shift → Search Everywhere
+      if (e.key === "Shift" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const now = Date.now();
+        if (now - lastShiftRef.current < 400) {
+          e.preventDefault();
+          setActiveTab("search");
+          setSearchOpen(true);
+          lastShiftRef.current = 0;
+        } else {
+          lastShiftRef.current = now;
+        }
+        return;
+      }
+
+      // ⌘P → open file palette in editor
+      if ((e.metaKey || e.ctrlKey) && e.key === "p" && !e.shiftKey) {
+        e.preventDefault();
+        setActiveTab("editor");
+        setFilePaletteOpen(true);
+        return;
+      }
+
+      // ⌘⇧D → debugger
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "d") {
+        e.preventDefault();
+        setActiveTab("debugger");
+        return;
+      }
+
+      // ⌘⇧X → plugins
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "x") {
+        e.preventDefault();
+        setActiveTab("plugins");
+        return;
+      }
+
+      // ⌘, → run config / settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setActiveTab("config");
+        return;
+      }
+
+      // Escape → close search if open
+      if (e.key === "Escape") {
+        if (searchOpen) {
+          setSearchOpen(false);
+          setActiveTab("editor");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [setActiveTab, searchOpen]);
 
   // Context value
   const ctxValue = useMemo(
@@ -224,6 +289,7 @@ function ShinraApp({ initialTab, onNavigate }) {
       activeConfig, setActiveConfig,
       debugSession, setDebugSession,
       searchOpen, setSearchOpen,
+      filePaletteOpen, setFilePaletteOpen,
       aiHistory, setAiHistory,
     }),
     [
@@ -234,6 +300,7 @@ function ShinraApp({ initialTab, onNavigate }) {
       runConfigs, activeConfig,
       debugSession,
       searchOpen,
+      filePaletteOpen,
       aiHistory,
     ]
   );
