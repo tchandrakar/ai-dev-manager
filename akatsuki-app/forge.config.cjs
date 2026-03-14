@@ -45,7 +45,7 @@ module.exports = {
     executableName: "Akatsuki",
     // Unpack .node binaries outside the asar so Electron can load them
     asar: { unpack: "**/*.node" },
-    icon: "./icons/icon",
+    icon: path.join(__dirname, "icons", "icon"),
   },
   hooks: {
     /**
