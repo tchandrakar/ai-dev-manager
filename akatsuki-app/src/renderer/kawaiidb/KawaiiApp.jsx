@@ -424,8 +424,6 @@ function KawaiiApp({ initialTab, onNavigate }) {
     switch (activeTab) {
       case "navigator":
         return `${activeConnection.name} | ${label} | ${activeConnection.database}${activeTable ? ` > ${activeTable}` : ""}`;
-      case "query":
-        return `${activeConnection.name} | ${label} | ${activeConnection.database} | ${sqlTabs.length} tab${sqlTabs.length !== 1 ? "s" : ""} open`;
       case "dashboard":
         return `${activeConnection.name} | ${label} | Server monitoring`;
       case "ai-analyze":
@@ -440,24 +438,23 @@ function KawaiiApp({ initialTab, onNavigate }) {
   // Whether to show connection selector (on non-connections tabs)
   const showConnectionSelector = activeTab !== "connections";
 
-  // Render active screen
-  const renderScreen = () => {
-    switch (activeTab) {
-      case "connections":
-        return <ScreenConnections />;
-      case "navigator":
-        return <ScreenNavigator />;
-      case "query":
-        return <ScreenQuery />;
-      case "dashboard":
-        return <ScreenDashboard />;
-      case "ai-analyze":
-        return <ScreenAIAnalyze />;
-      case "history":
-        return <ScreenHistory />;
-      default:
-        return null;
-    }
+  // Track which screens have been visited so they stay mounted
+  const [visitedTabs, setVisitedTabs] = useState(new Set([activeTab]));
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
+  const SCREEN_MAP = {
+    connections: ScreenConnections,
+    navigator: ScreenNavigator,
+    dashboard: ScreenDashboard,
+    "ai-analyze": ScreenAIAnalyze,
+    history: ScreenHistory,
   };
 
   return (
@@ -511,7 +508,16 @@ function KawaiiApp({ initialTab, onNavigate }) {
             flexDirection: "column",
           }}
         >
-          <Suspense fallback={<ScreenLoader />}>{renderScreen()}</Suspense>
+          <Suspense fallback={<ScreenLoader />}>
+            {Object.entries(SCREEN_MAP).map(([key, Component]) => {
+              if (!visitedTabs.has(key)) return null;
+              return (
+                <div key={key} style={{ display: activeTab === key ? "contents" : "none" }}>
+                  <Component />
+                </div>
+              );
+            })}
+          </Suspense>
         </main>
 
         {/* ── Status bar ──────────────────────────────────────────────── */}

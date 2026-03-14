@@ -561,7 +561,7 @@ function QueryResultRow({ row, columns, rowIndex }) {
 
 // ── SQL Editor Sub-View ─────────────────────────────────────────────────────
 function SQLEditorView() {
-  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab, activeConnection, schema } = useKawaii();
+  const { sqlTabs, activeSqlTab, setActiveSqlTab, addSqlTab, activeConnection, schema, setActiveTab, setAiAnalyzeInitialSQL } = useKawaii();
   const suggestions = useMemo(() => buildSuggestions(schema), [schema]);
 
   // Per-tab SQL content storage
@@ -869,6 +869,28 @@ function SQLEditorView() {
               }}
             >
               Run
+            </button>
+            <button
+              onClick={() => {
+                const sql = (tabContents[activeSqlTab] || "").trim();
+                if (sql) {
+                  setAiAnalyzeInitialSQL(sql);
+                  setActiveTab("ai-analyze");
+                }
+              }}
+              style={{
+                padding: "3px 12px",
+                borderRadius: 4,
+                border: `1px solid ${T.purple}50`,
+                background: `${T.purple}18`,
+                color: T.purple,
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: T.fontUI,
+              }}
+            >
+              AI Analyze
             </button>
           </PanelHeader>
 

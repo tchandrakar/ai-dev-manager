@@ -339,7 +339,7 @@ ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, databas
   const db = (database || "").trim();
   const user = (username || "").trim();
   const pass = password || "";
-  const TIMEOUT = 8000;
+  const TIMEOUT = 20000;
 
   // ── SSH Tunnel (for test, create temporary tunnel) ─────────────────────────
   let tempTunnel = null;
@@ -549,7 +549,7 @@ ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, u
   const db = (database || "").trim();
   const user = (username || "").trim();
   const pass = password || "";
-  const TIMEOUT = 8000;
+  const TIMEOUT = 20000;
 
   // Close existing connection & SSH tunnel if any
   _destroySSHTunnel(id);

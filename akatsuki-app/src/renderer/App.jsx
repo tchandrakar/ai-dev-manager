@@ -271,9 +271,6 @@ function LeftNav({ screen, onNavigate, prData, historyCount, connections, collap
                 <NavRow icon={"\u2261"} label="Navigator" sub="Browse & edit"
                   active={screen === "kawaiidb:navigator"} accentColor={T.blue}
                   indent={16} onClick={() => onNavigate("kawaiidb:navigator")} />
-                <NavRow icon={"\u26A1"} label="Query" sub="SQL editor"
-                  active={screen === "kawaiidb:query"} accentColor={T.green}
-                  indent={16} onClick={() => onNavigate("kawaiidb:query")} />
                 <NavRow icon={"\u2637"} label="Dashboard" sub="Monitoring"
                   active={screen === "kawaiidb:dashboard"} accentColor={T.amber}
                   indent={16} onClick={() => onNavigate("kawaiidb:dashboard")} />

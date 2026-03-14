@@ -124,16 +124,17 @@ function TimePill({ label, active, onClick }) {
 function QueryPerformanceChart({ realMetrics }) {
   const [range, setRange] = useState("Live");
   const ranges = ["Live"];
-  const samplesRef = useRef([]);
+  const [samples, setSamples] = useState([]);
 
   // Accumulate real metric snapshots (keep last 60 = ~10 minutes at 10s intervals)
   useEffect(() => {
     if (realMetrics) {
-      samplesRef.current = [...samplesRef.current, {
+      setSamples((prev) => [...prev, {
         queriesPerSec: realMetrics.queriesPerSec || 0,
         avgQueryTime: realMetrics.avgQueryTime || 0,
+        diskUsed: realMetrics.diskUsed || 0,
         ts: Date.now(),
-      }].slice(-60);
+      }].slice(-60));
     }
   }, [realMetrics]);
 
@@ -147,33 +148,29 @@ function QueryPerformanceChart({ realMetrics }) {
   const drawH = chartH - padT - padB;
 
   const { avgData, qpsData } = useMemo(() => {
-    const samples = samplesRef.current;
     if (samples.length < 2) {
-      // Not enough real data yet — show flat line at current value
-      const val = realMetrics?.avgQueryTime || 0;
       const qps = realMetrics?.queriesPerSec || 0;
-      return { avgData: Array(10).fill(val || 1), qpsData: Array(10).fill(qps || 1) };
+      const disk = realMetrics?.diskUsed || 0;
+      return { avgData: Array(10).fill(qps || 1), qpsData: Array(10).fill(disk || 1) };
     }
     return {
-      avgData: samples.map((s) => s.avgQueryTime),
-      qpsData: samples.map((s) => s.queriesPerSec),
+      avgData: samples.map((s) => s.queriesPerSec),
+      qpsData: samples.map((s) => s.diskUsed),
     };
-  }, [realMetrics]);
+  }, [samples, realMetrics]);
 
-  const maxVal = Math.max(10, ...avgData, ...qpsData.map((v) => v * 0.1)) * 1.2;
-  const yMax = Math.ceil(maxVal / 10) * 10;
-  const yLabels = [yMax, Math.round(yMax * 0.75), Math.round(yMax * 0.5), Math.round(yMax * 0.25), 0].map((v) => `${v}ms`);
+  const maxVal = Math.max(10, ...avgData, ...qpsData) * 1.2;
+  const yMax = Math.ceil(maxVal / 10) * 10 || 10;
+  const yLabels = [yMax, Math.round(yMax * 0.75), Math.round(yMax * 0.5), Math.round(yMax * 0.25), 0].map((v) => String(v));
 
-  // Time labels for live mode
   const numPts = avgData.length;
   const xLabels = numPts <= 10
-    ? Array.from({ length: Math.min(7, numPts) }, (_, i) => i === Math.min(6, numPts - 1) ? "Now" : `${Math.round((numPts - 1 - i * (numPts / 7)) * 10)}s ago`).reverse()
+    ? ["", "", "", "", "", "", "Now"]
     : ["5m ago", "4m", "3m", "2m", "1m", "30s", "Now"];
 
   const avgPath = dataToPath(avgData, drawW, drawH, yMax, padL, padT);
   const avgAreaPath = dataToAreaPath(avgData, drawW, drawH, yMax, padL, padT);
-  const qpsScaled = qpsData.map((v) => v * 0.1); // scale qps to fit chart
-  const qpsPath = dataToPath(qpsScaled, drawW, drawH, yMax, padL, padT);
+  const qpsPath = dataToPath(qpsData, drawW, drawH, yMax, padL, padT);
 
   return (
     <div
@@ -252,13 +249,13 @@ function QueryPerformanceChart({ realMetrics }) {
             <svg width={20} height={2}>
               <line x1={0} y1={1} x2={20} y2={1} stroke={T.teal} strokeWidth={2} />
             </svg>
-            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Avg Query Time (ms)</span>
+            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Queries/sec</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <svg width={20} height={2}>
               <line x1={0} y1={1} x2={20} y2={1} stroke={T.amber} strokeWidth={1.5} strokeDasharray="4 3" />
             </svg>
-            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Queries/sec (scaled)</span>
+            <span style={{ fontSize: 10, color: T.txt2, fontFamily: T.fontUI }}>Disk Used (MB)</span>
           </div>
         </div>
       </div>
