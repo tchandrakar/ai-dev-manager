@@ -280,8 +280,9 @@ function _createCommandTunnel(command) {
       reject(new Error("Tunnel command timed out waiting for port to become ready"));
     }, 30000);
 
-    // Spawn the command as a shell process (stdin must be a pipe for gcloud/ssh)
-    const proc = spawn("sh", ["-c", command], {
+    // Use login shell to inherit user's full PATH (macOS Electron apps don't get /opt/homebrew/bin etc.)
+    const userShell = process.env.SHELL || "/bin/zsh";
+    const proc = spawn(userShell, ["-l", "-c", command], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
       detached: false,
