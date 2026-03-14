@@ -607,6 +607,9 @@ ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, u
         user: user || "postgres",
         password: pass,
         connectionTimeoutMillis: TIMEOUT,
+        idleTimeoutMillis: 0,        // never reap idle clients
+        keepAlive: true,              // TCP keepalive on sockets
+        keepAliveInitialDelayMillis: 10000,
         max: 5,
         ssl: false,
       });
@@ -625,6 +628,8 @@ ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, u
         password: pass,
         connectTimeout: TIMEOUT,
         connectionLimit: 5,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000,
       });
       const [[row]] = await pool.query("SELECT VERSION() as v");
       const ver = `${type === "mariadb" ? "MariaDB" : "MySQL"} ${row.v}`;
