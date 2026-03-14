@@ -214,6 +214,116 @@ ipcMain.handle("workdir:clear", (_, dir) => memClearAll(dir));
 
 // ── KawaiiDB persistent connection pool ──────────────────────────────────────
 const _dbPools = new Map(); // connectionId -> { type, client, meta }
+const _sshTunnels = new Map(); // connectionId -> { sshClient, server, localPort }
+
+// ── SSH Tunnel helper (key / agent mode) ─────────────────────────────────────
+function _createSSHTunnel({ sshHost, sshPort, sshUser, sshKey, targetHost, targetPort }) {
+  const { Client: SSHClient } = require("ssh2");
+  const net = require("net");
+  return new Promise((resolve, reject) => {
+    const ssh = new SSHClient();
+    const timeout = setTimeout(() => { ssh.destroy(); reject(new Error("SSH tunnel timed out")); }, 15000);
+
+    ssh.on("ready", () => {
+      // SSH connected — now start local TCP server that forwards to remote target
+      const server = net.createServer((sock) => {
+        ssh.forwardOut("127.0.0.1", sock.localPort, targetHost || "127.0.0.1", targetPort, (err, stream) => {
+          if (err) { sock.destroy(); return; }
+          sock.pipe(stream).pipe(sock);
+          sock.on("error", () => stream.destroy());
+          stream.on("error", () => sock.destroy());
+        });
+      });
+      server.listen(0, "127.0.0.1", () => {
+        clearTimeout(timeout);
+        resolve({ sshClient: ssh, server, localPort: server.address().port });
+      });
+      server.on("error", (err) => { clearTimeout(timeout); ssh.destroy(); reject(err); });
+    });
+
+    ssh.on("error", (err) => {
+      clearTimeout(timeout);
+      reject(new Error(`SSH: ${err.message}`));
+    });
+
+    // Build SSH connect options
+    const sshOpts = {
+      host: sshHost,
+      port: parseInt(sshPort, 10) || 22,
+      username: sshUser || os.userInfo().username,
+      readyTimeout: 12000,
+    };
+    const keyPath = (sshKey || "").replace(/^~/, os.homedir());
+    if (keyPath && fs.existsSync(keyPath)) {
+      sshOpts.privateKey = fs.readFileSync(keyPath);
+    } else {
+      sshOpts.agent = process.env.SSH_AUTH_SOCK;
+    }
+    ssh.connect(sshOpts);
+  });
+}
+
+// ── SSH Tunnel helper (custom command mode, e.g. gcloud compute ssh) ─────────
+function _createCommandTunnel(command) {
+  const { spawn } = require("child_process");
+  const net = require("net");
+
+  // Parse -L localPort:host:remotePort from the command
+  const lMatch = command.match(/-L\s+(\d+):([^:]+):(\d+)/);
+  if (!lMatch) return Promise.reject(new Error("Could not find -L <localPort>:<host>:<remotePort> in the command"));
+
+  const localPort = parseInt(lMatch[1], 10);
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      try { proc.kill(); } catch {}
+      reject(new Error("Tunnel command timed out waiting for port to become ready"));
+    }, 30000);
+
+    // Spawn the command as a shell process
+    const proc = spawn("sh", ["-c", command], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+      detached: false,
+    });
+
+    let stderr = "";
+    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+    proc.on("error", (err) => { clearTimeout(timeout); reject(new Error(`Tunnel command failed: ${err.message}`)); });
+    proc.on("exit", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0 && code !== null) reject(new Error(`Tunnel command exited with code ${code}: ${stderr.slice(0, 200)}`));
+    });
+
+    // Wait for the local port to become reachable
+    const checkPort = () => {
+      const sock = new net.Socket();
+      sock.setTimeout(500);
+      sock.on("connect", () => {
+        sock.destroy();
+        clearTimeout(timeout);
+        resolve({ process: proc, localPort });
+      });
+      sock.on("error", () => { sock.destroy(); setTimeout(checkPort, 500); });
+      sock.on("timeout", () => { sock.destroy(); setTimeout(checkPort, 500); });
+      sock.connect(localPort, "127.0.0.1");
+    };
+    // Give the command a moment to start before checking
+    setTimeout(checkPort, 1000);
+  });
+}
+
+function _destroySSHTunnel(id) {
+  const t = _sshTunnels.get(id);
+  if (!t) return;
+  if (t.process) {
+    try { t.process.kill(); } catch {}
+  } else {
+    try { t.server.close(); } catch {}
+    try { t.sshClient.destroy(); } catch {}
+  }
+  _sshTunnels.delete(id);
+}
 
 function _dbQuoteId(type, name) {
   if (type === "mysql" || type === "mariadb") return "`" + name.replace(/`/g, "``") + "`";
@@ -221,13 +331,37 @@ function _dbQuoteId(type, name) {
 }
 
 // ── KawaiiDB connection test ──────────────────────────────────────────────────
-ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, database, username, password }) => {
-  const h = (host || "localhost").trim();
-  const p = parseInt(port, 10) || 0;
+ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, database, username, password, sshEnabled, sshMode, sshHost, sshPort, sshUser, sshKey, sshCommand }) => {
+  let h = (host || "localhost").trim();
+  let p = parseInt(port, 10) || 0;
   const db = (database || "").trim();
   const user = (username || "").trim();
   const pass = password || "";
   const TIMEOUT = 8000;
+
+  // ── SSH Tunnel (for test, create temporary tunnel) ─────────────────────────
+  let tempTunnel = null;
+  if (sshEnabled) {
+    const defaultPort = { postgresql: 5432, mysql: 3306, mariadb: 3306, mongodb: 27017, redis: 6379, sqlserver: 1433, oracle: 1521 }[type] || p;
+    try {
+      if (sshMode === "command" && sshCommand) {
+        tempTunnel = await _createCommandTunnel(sshCommand);
+      } else if (sshHost) {
+        tempTunnel = await _createSSHTunnel({
+          sshHost, sshPort: sshPort || "22", sshUser, sshKey,
+          targetHost: h, targetPort: p || defaultPort,
+        });
+      }
+      if (tempTunnel) {
+        h = "127.0.0.1";
+        p = tempTunnel.localPort;
+      }
+    } catch (e) {
+      return { ok: false, msg: `SSH tunnel failed: ${e.message}` };
+    }
+  }
+
+  try {
 
   // ── SQLite ──────────────────────────────────────────────────────────────────
   if (type === "sqlite") {
@@ -379,7 +513,7 @@ ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, databas
   // ── Generic TCP fallback (Oracle without driver, or unknown types) ──────────
   const net = require("net");
   if (!h || !p) return { ok: false, msg: "Host and port are required" };
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     const socket = new net.Socket();
     let resolved = false;
     const done = (r) => { if (resolved) return; resolved = true; socket.destroy(); resolve(r); };
@@ -392,18 +526,31 @@ ipcMain.handle("kawaiidb:test-connection", async (_, { type, host, port, databas
     });
     socket.connect(p, h);
   });
+
+  } finally {
+    // Clean up temporary SSH tunnel after test
+    if (tempTunnel) {
+      if (tempTunnel.process) {
+        try { tempTunnel.process.kill(); } catch {}
+      } else {
+        try { tempTunnel.server.close(); } catch {}
+        try { tempTunnel.sshClient.destroy(); } catch {}
+      }
+    }
+  }
 });
 
 // ── KawaiiDB: persistent connect ──────────────────────────────────────────────
-ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, username, password }) => {
-  const h = (host || "localhost").trim();
-  const p = parseInt(port, 10) || 0;
+ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, username, password, sshEnabled, sshMode, sshHost, sshPort, sshUser, sshKey, sshCommand }) => {
+  let h = (host || "localhost").trim();
+  let p = parseInt(port, 10) || 0;
   const db = (database || "").trim();
   const user = (username || "").trim();
   const pass = password || "";
   const TIMEOUT = 8000;
 
-  // Close existing if any
+  // Close existing connection & SSH tunnel if any
+  _destroySSHTunnel(id);
   if (_dbPools.has(id)) {
     try {
       const old = _dbPools.get(id);
@@ -414,6 +561,29 @@ ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, u
       else if (old.client.close) await old.client.close();
     } catch {}
     _dbPools.delete(id);
+  }
+
+  // ── SSH Tunnel (persistent, stored for cleanup on disconnect) ──────────────
+  if (sshEnabled) {
+    const defaultPort = { postgresql: 5432, mysql: 3306, mariadb: 3306, mongodb: 27017, redis: 6379, sqlserver: 1433, oracle: 1521 }[type] || p;
+    try {
+      let tunnel;
+      if (sshMode === "command" && sshCommand) {
+        tunnel = await _createCommandTunnel(sshCommand);
+      } else if (sshHost) {
+        tunnel = await _createSSHTunnel({
+          sshHost, sshPort: sshPort || "22", sshUser, sshKey,
+          targetHost: h, targetPort: p || defaultPort,
+        });
+      }
+      if (tunnel) {
+        _sshTunnels.set(id, tunnel);
+        h = "127.0.0.1";
+        p = tunnel.localPort;
+      }
+    } catch (e) {
+      return { ok: false, msg: `SSH tunnel failed: ${e.message}` };
+    }
   }
 
   try {
@@ -516,16 +686,19 @@ ipcMain.handle("kawaiidb:connect", async (_, { id, type, host, port, database, u
 
 // ── KawaiiDB: disconnect ────────────────────────────────────────────────────
 ipcMain.handle("kawaiidb:disconnect", async (_, { id }) => {
-  if (!_dbPools.has(id)) return { ok: true };
+  if (!_dbPools.has(id) && !_sshTunnels.has(id)) return { ok: true };
   try {
     const entry = _dbPools.get(id);
-    if (entry.type === "sqlite") entry.client.close();
-    else if (entry.type === "mongodb") await entry.client.close();
-    else if (entry.type === "redis") entry.client.disconnect();
-    else if (entry.client.end) await entry.client.end();
-    else if (entry.client.close) await entry.client.close();
+    if (entry) {
+      if (entry.type === "sqlite") entry.client.close();
+      else if (entry.type === "mongodb") await entry.client.close();
+      else if (entry.type === "redis") entry.client.disconnect();
+      else if (entry.client.end) await entry.client.end();
+      else if (entry.client.close) await entry.client.close();
+    }
   } catch {}
   _dbPools.delete(id);
+  _destroySSHTunnel(id);
   return { ok: true };
 });
 

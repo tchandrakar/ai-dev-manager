@@ -92,6 +92,13 @@ function ConnectionSelector({ connections, activeConnection, onSelect, onConnect
           database: conn.database,
           username: conn.username,
           password: conn.password,
+          sshEnabled: conn.sshEnabled,
+          sshMode: conn.sshMode,
+          sshHost: conn.sshHost,
+          sshPort: conn.sshPort,
+          sshUser: conn.sshUser,
+          sshKey: conn.sshKey,
+          sshCommand: conn.sshCommand,
         });
         if (result.ok) {
           const updated = { ...conn, status: "online", lastUsed: "Just now", ...(result.version ? { version: result.version } : {}) };
@@ -292,6 +299,13 @@ function KawaiiApp({ initialTab, onNavigate }) {
         database: conn.database,
         username: conn.username,
         password: conn.password,
+        sshEnabled: conn.sshEnabled,
+        sshMode: conn.sshMode,
+        sshHost: conn.sshHost,
+        sshPort: conn.sshPort,
+        sshUser: conn.sshUser,
+        sshKey: conn.sshKey,
+        sshCommand: conn.sshCommand,
       };
 
       try {

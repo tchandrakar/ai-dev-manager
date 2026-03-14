@@ -260,10 +260,12 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
         username: editConn.username || "",
         password: editConn.password || "",
         sshEnabled: editConn.sshEnabled || false,
+        sshMode: editConn.sshMode || "key",
         sshHost: editConn.sshHost || "",
         sshPort: editConn.sshPort || "22",
         sshUser: editConn.sshUser || "",
         sshKey: editConn.sshKey || "",
+        sshCommand: editConn.sshCommand || "",
         timeout: editConn.timeout || "30",
         charset: editConn.charset || "utf8mb4",
         sslMode: editConn.sslMode || "Preferred",
@@ -272,7 +274,7 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
     return {
       name: "", host: "", port: "", database: "",
       username: "", password: "",
-      sshEnabled: false, sshHost: "", sshPort: "22", sshUser: "", sshKey: "",
+      sshEnabled: false, sshMode: "key", sshHost: "", sshPort: "22", sshUser: "", sshKey: "", sshCommand: "",
       timeout: "30", charset: "utf8mb4", sslMode: "Preferred",
     };
   });
@@ -407,10 +409,12 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
       username: formData.username,
       password: formData.password,
       sshEnabled: formData.sshEnabled,
+      sshMode: formData.sshMode,
       sshHost: formData.sshHost,
       sshPort: formData.sshPort,
       sshUser: formData.sshUser,
       sshKey: formData.sshKey,
+      sshCommand: formData.sshCommand,
       timeout: formData.timeout,
       charset: formData.charset,
       sslMode: formData.sslMode,
@@ -438,6 +442,13 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
         database: formData.database.trim(),
         username: formData.username,
         password: formData.password,
+        sshEnabled: formData.sshEnabled,
+        sshMode: formData.sshMode,
+        sshHost: formData.sshHost,
+        sshPort: formData.sshPort,
+        sshUser: formData.sshUser,
+        sshKey: formData.sshKey,
+        sshCommand: formData.sshCommand,
       });
       if (result.ok) {
         conn.status = "online";
@@ -466,6 +477,13 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
         database: formData.database.trim(),
         username: formData.username,
         password: formData.password,
+        sshEnabled: formData.sshEnabled,
+        sshMode: formData.sshMode,
+        sshHost: formData.sshHost,
+        sshPort: formData.sshPort,
+        sshUser: formData.sshUser,
+        sshKey: formData.sshKey,
+        sshCommand: formData.sshCommand,
       });
       setTestResult({
         type: result.ok ? "success" : "error",
@@ -751,46 +769,82 @@ function ConnectionModal({ editConn, onClose, onSave, onSaveAndGo }) {
             </div>
 
             <div style={{ opacity: formData.sshEnabled ? 1 : 0.35, pointerEvents: formData.sshEnabled ? "auto" : "none", transition: "opacity 0.2s" }}>
-              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                <div style={{ flex: 3 }}>
-                  <div style={labelStyle}>SSH Host</div>
-                  <input
-                    type="text" value={formData.sshHost}
-                    onChange={e => upd("sshHost", e.target.value)}
-                    placeholder="ssh.example.com"
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={labelStyle}>SSH Port</div>
-                  <input
-                    type="text" value={formData.sshPort}
-                    onChange={e => upd("sshPort", e.target.value)}
-                    placeholder="22"
-                    style={inputStyle}
-                  />
-                </div>
+              {/* SSH Mode tabs */}
+              <div style={{ display: "flex", gap: 0, marginBottom: 14, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.border2}` }}>
+                {[["key", "SSH Key / Agent"], ["command", "Custom Command"]].map(([mode, label]) => (
+                  <div
+                    key={mode}
+                    onClick={() => upd("sshMode", mode)}
+                    style={{
+                      flex: 1, padding: "7px 0", textAlign: "center", cursor: "pointer",
+                      fontSize: 10, fontWeight: 600, fontFamily: T.fontUI, letterSpacing: 0.3,
+                      background: formData.sshMode === mode ? T.bg3 : "transparent",
+                      color: formData.sshMode === mode ? T.txt : T.txt3,
+                      borderRight: mode === "key" ? `1px solid ${T.border2}` : "none",
+                      transition: "background 0.15s, color 0.15s",
+                    }}
+                  >{label}</div>
+                ))}
               </div>
-              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={labelStyle}>SSH Username</div>
+
+              {formData.sshMode === "key" ? (
+                <>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                    <div style={{ flex: 3 }}>
+                      <div style={labelStyle}>SSH Host</div>
+                      <input
+                        type="text" value={formData.sshHost}
+                        onChange={e => upd("sshHost", e.target.value)}
+                        placeholder="ssh.example.com"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={labelStyle}>SSH Port</div>
+                      <input
+                        type="text" value={formData.sshPort}
+                        onChange={e => upd("sshPort", e.target.value)}
+                        placeholder="22"
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={labelStyle}>SSH Username</div>
+                      <input
+                        type="text" value={formData.sshUser}
+                        onChange={e => upd("sshUser", e.target.value)}
+                        placeholder="ubuntu"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={labelStyle}>SSH Key</div>
+                      <input
+                        type="text" value={formData.sshKey}
+                        onChange={e => upd("sshKey", e.target.value)}
+                        placeholder="~/.ssh/id_rsa"
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={labelStyle}>Tunnel Command</div>
                   <input
-                    type="text" value={formData.sshUser}
-                    onChange={e => upd("sshUser", e.target.value)}
-                    placeholder="ubuntu"
-                    style={inputStyle}
+                    type="text" value={formData.sshCommand}
+                    onChange={e => upd("sshCommand", e.target.value)}
+                    placeholder="gcloud compute ssh myvm --zone=us-central1-a -- -L 5432:localhost:5432 -N"
+                    style={{ ...inputStyle, fontFamily: T.fontMono, fontSize: 11 }}
                   />
+                  <div style={{ fontSize: 10, color: T.txt3, marginTop: 4, fontFamily: T.fontUI, lineHeight: 1.4 }}>
+                    Command must forward a local port to the DB host:port (e.g. <span style={{ color: T.cyan, fontFamily: T.fontMono }}>-L 15432:localhost:5432</span>).
+                    KawaiiDB will auto-detect the local port from the command.
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={labelStyle}>SSH Key</div>
-                  <input
-                    type="text" value={formData.sshKey}
-                    onChange={e => upd("sshKey", e.target.value)}
-                    placeholder="~/.ssh/id_rsa"
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
             {/* ADVANCED OPTIONS */}
