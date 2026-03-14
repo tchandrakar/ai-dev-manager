@@ -845,7 +845,7 @@ function computeHighlights(sql, issues) {
 
 // ── Main Screen ─────────────────────────────────────────────────────────────
 function ScreenAIAnalyze() {
-  const { activeConnection, setActiveTab, setSqlTabs, activeSqlTab, aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL } = useKawaii();
+  const { activeConnection, setActiveTab, setNavigatorView, setSqlTabs, activeSqlTab, aiAnalyzeInitialSQL, setAiAnalyzeInitialSQL } = useKawaii();
 
   const [inputSQL, setInputSQL] = useState("");
   const [analysis, setAnalysis] = useState(null); // { issues, score }
@@ -927,14 +927,15 @@ function ScreenAIAnalyze() {
 
   const handleApply = useCallback(() => {
     if (!optimizedSQL) return;
-    // Set the optimized SQL into the active query tab and navigate to Query screen
+    // Set the optimized SQL into the active query tab and navigate to Navigator editor
     setSqlTabs((prev) =>
       prev.map((tab) =>
         tab.id === activeSqlTab ? { ...tab, content: optimizedSQL } : tab
       )
     );
-    setActiveTab("query");
-  }, [optimizedSQL, setSqlTabs, activeSqlTab, setActiveTab]);
+    setNavigatorView("editor");
+    setActiveTab("navigator");
+  }, [optimizedSQL, setSqlTabs, activeSqlTab, setActiveTab, setNavigatorView]);
 
   // Compute line highlights for input SQL
   const inputHighlights = useMemo(() => {

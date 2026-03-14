@@ -872,6 +872,34 @@ function SQLEditorView() {
             </button>
             <button
               onClick={() => {
+                const raw = tabContents[activeSqlTab] || "";
+                if (!raw.trim()) return;
+                // Simple SQL formatter: uppercase keywords, newlines before major clauses
+                const kws = /\b(SELECT|FROM|WHERE|AND|OR|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|OUTER JOIN|FULL JOIN|CROSS JOIN|ON|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE TABLE|ALTER TABLE|DROP TABLE|UNION|UNION ALL|CASE|WHEN|THEN|ELSE|END)\b/gi;
+                let formatted = raw.replace(kws, (m) => m.toUpperCase());
+                // Add newlines before major clauses
+                formatted = formatted.replace(/\s+(FROM|WHERE|AND|OR|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|SET|VALUES|UNION|ON)\b/gi,
+                  (m, kw) => "\n" + kw.toUpperCase());
+                // Indent continuation lines
+                formatted = formatted.replace(/\n(AND|OR)\b/gi, (m, kw) => "\n  " + kw.toUpperCase());
+                setTabContents((prev) => ({ ...prev, [activeSqlTab]: formatted.trim() }));
+              }}
+              style={{
+                padding: "3px 12px",
+                borderRadius: 4,
+                border: `1px solid ${T.txt3}40`,
+                background: `${T.txt3}14`,
+                color: T.txt2,
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: T.fontUI,
+              }}
+            >
+              Format
+            </button>
+            <button
+              onClick={() => {
                 const sql = (tabContents[activeSqlTab] || "").trim();
                 if (sql) {
                   setAiAnalyzeInitialSQL(sql);
