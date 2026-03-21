@@ -5,7 +5,7 @@ import { useShinra } from "./ShinraApp";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const NODE_W = 160;
-const NODE_H = 40;
+const NODE_H = 36;
 
 // Color by file category
 function categorize(filePath) {
@@ -174,11 +174,45 @@ function findCycles(nodes, edges) {
 
 // ── Named sub-components ─────────────────────────────────────────────────────
 
+// File type icon paths (small SVG path data for common file types)
+function fileIcon(cat) {
+  // Returns a small icon path scaled for 14x14 viewBox
+  switch (cat) {
+    case "component": return "M3 1h8l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V2a1 1 0 011-1zm4 5l-2 3h4l-2 3"; // JSX
+    case "hook": return "M7 1a6 6 0 110 12A6 6 0 017 1zm0 3v3l2 2"; // hook / circle-clock
+    case "state": return "M2 3h10v2H2zm0 4h10v2H2zm0 4h7v2H2z"; // state / layers
+    case "test": return "M5 1l-4 6h3v6h2V7h3L5 1z"; // test / lightning
+    case "util": return "M6 1L1 7l5 6 1-1-4-5 4-5-1-1zm5 0l-1 1 4 5-4 5 1 1 5-6-5-6z"; // util / code brackets
+    case "entry": return "M7 1l6 6-6 6-1-1 5-5-5-5 1-1z"; // entry / chevron
+    case "types": return "M2 2h10v3H8v2h3v3H8v3H5V10H2V7h3V5H2V2z"; // types / T-shape
+    default: return "M3 1h6l4 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2a1 1 0 011-1z"; // generic file
+  }
+}
+
 function GraphNode({ node, pos, isSelected, isInCycle, isHovered, onClick, onMouseDown, onHover }) {
-  const { color } = categorize(node.id);
+  const { color, cat } = categorize(node.id);
   const name = node.name;
-  const borderColor = isHovered ? T.blue : isSelected ? T.blue : isInCycle ? T.red : `${color}60`;
-  const bgColor = isHovered ? `${T.blue}22` : isSelected ? `${T.blue}18` : isInCycle ? `${T.red}10` : `${color}10`;
+
+  // Visual states
+  const borderColor = isInCycle
+    ? T.red
+    : isSelected
+      ? T.cyan
+      : isHovered
+        ? T.blue
+        : T.border;
+  const bgColor = isHovered
+    ? T.bg3
+    : isSelected
+      ? `${T.cyan}12`
+      : isInCycle
+        ? `${T.red}0A`
+        : T.bg2;
+  const strokeW = isSelected ? 2 : isInCycle ? 1.5 : 1;
+  const strokeDash = isInCycle ? "4 3" : "none";
+
+  const iconColor = isInCycle ? T.red : color;
+  const truncated = name.length > 16 ? name.slice(0, 14) + "\u2026" : name;
 
   return (
     <g
@@ -189,6 +223,23 @@ function GraphNode({ node, pos, isSelected, isInCycle, isHovered, onClick, onMou
       onMouseEnter={() => onHover(node.id)}
       onMouseLeave={() => onHover(null)}
     >
+      {/* Shadow for selected nodes */}
+      {isSelected && (
+        <rect
+          x={-NODE_W / 2 + 1}
+          y={-NODE_H / 2 + 2}
+          width={NODE_W}
+          height={NODE_H}
+          rx={8}
+          ry={8}
+          fill="none"
+          stroke={T.cyan}
+          strokeWidth={1}
+          opacity={0.2}
+        />
+      )}
+
+      {/* Main rect */}
       <rect
         x={-NODE_W / 2}
         y={-NODE_H / 2}
@@ -198,39 +249,40 @@ function GraphNode({ node, pos, isSelected, isInCycle, isHovered, onClick, onMou
         ry={8}
         fill={bgColor}
         stroke={borderColor}
-        strokeWidth={isSelected ? 2 : 1}
+        strokeWidth={strokeW}
+        strokeDasharray={strokeDash}
       />
-      {/* Color stripe on left */}
-      <rect
-        x={-NODE_W / 2}
-        y={-NODE_H / 2 + 4}
-        width={3}
-        height={NODE_H - 8}
-        rx={1.5}
-        fill={isInCycle ? T.red : color}
-      />
+
+      {/* File type icon on the left */}
+      <g transform={`translate(${-NODE_W / 2 + 10}, ${-7})`}>
+        <svg width="14" height="14" viewBox="0 0 14 14">
+          <path d={fileIcon(cat)} fill={iconColor} opacity={0.85} />
+        </svg>
+      </g>
+
+      {/* File name */}
       <text
-        x={0}
-        y={-2}
+        x={4}
+        y={1}
         textAnchor="middle"
-        fill={T.txt}
+        dominantBaseline="central"
+        fill={isSelected ? T.txt : isHovered ? T.txt : T.txt2}
         fontSize={11}
         fontFamily={T.fontUI}
-        fontWeight={600}
+        fontWeight={isSelected ? 700 : 500}
       >
-        {name.length > 18 ? name.slice(0, 16) + "..." : name}
+        {truncated}
       </text>
-      <text
-        x={0}
-        y={12}
-        textAnchor="middle"
-        fill={isInCycle ? T.red : color}
-        fontSize={9}
-        fontFamily={T.fontUI}
-      >
-        {categorize(node.id).label}
-        {isInCycle ? " (cycle)" : ""}
-      </text>
+
+      {/* Cycle indicator dot on top-right */}
+      {isInCycle && (
+        <circle
+          cx={NODE_W / 2 - 8}
+          cy={-NODE_H / 2 + 8}
+          r={3}
+          fill={T.red}
+        />
+      )}
     </g>
   );
 }
@@ -243,13 +295,22 @@ function GraphEdge({ from, to, isInCycle, highlighted }) {
   const x2 = to.x;
   const y2 = to.y - NODE_H / 2;
 
-  // Curved path
-  const midY = (y1 + y2) / 2;
-  const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+  // Smooth S-curve bezier: control points offset vertically for nice flow
+  const dy = Math.abs(y2 - y1);
+  const cpOffset = Math.max(40, dy * 0.45);
+  const d = `M ${x1} ${y1} C ${x1} ${y1 + cpOffset}, ${x2} ${y2 - cpOffset}, ${x2} ${y2}`;
 
-  const strokeColor = isInCycle ? T.red : highlighted ? T.blue : T.border2;
-  const strokeWidth = highlighted ? 2 : isInCycle ? 1.5 : 1;
-  const opacity = highlighted ? 1 : isInCycle ? 0.9 : 0.5;
+  // Styling per spec
+  const strokeColor = isInCycle ? T.red : highlighted ? T.blue : T.txt3;
+  const strokeWidth = isInCycle ? 2 : highlighted ? 2 : 1.5;
+  const opacity = highlighted ? 1 : isInCycle ? 0.9 : 0.4;
+  const dashArray = isInCycle ? "6 4" : "none";
+
+  // Arrowhead: small triangle at endpoint, pointing in the direction of the curve
+  // The curve arrives roughly vertically at the target, so triangle points up
+  const arrowSize = 5;
+  const ax = x2;
+  const ay = y2;
 
   return (
     <g>
@@ -258,12 +319,13 @@ function GraphEdge({ from, to, isInCycle, highlighted }) {
         fill="none"
         stroke={strokeColor}
         strokeWidth={strokeWidth}
-        strokeDasharray={isInCycle ? "4 3" : "none"}
+        strokeDasharray={dashArray}
         opacity={opacity}
+        strokeLinecap="round"
       />
-      {/* Arrowhead */}
+      {/* Arrowhead triangle */}
       <polygon
-        points={`${x2 - 4},${y2 - 7} ${x2},${y2} ${x2 + 4},${y2 - 7}`}
+        points={`${ax - arrowSize},${ay - arrowSize * 1.5} ${ax},${ay} ${ax + arrowSize},${ay - arrowSize * 1.5}`}
         fill={strokeColor}
         opacity={opacity}
       />
@@ -374,6 +436,29 @@ function HealthGauge({ score }) {
           / 100
         </text>
       </svg>
+    </div>
+  );
+}
+
+function ZoomButton({ label, title, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={title}
+      style={{
+        width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+        background: hovered ? T.bg3 : T.bg2,
+        border: `1px solid ${T.border}`,
+        borderRadius: 4, cursor: "pointer",
+        fontSize: 14, color: hovered ? T.txt : T.txt2,
+        fontFamily: T.fontUI, fontWeight: 500,
+        userSelect: "none", transition: "background 0.1s, color 0.1s",
+      }}
+    >
+      {label}
     </div>
   );
 }
@@ -817,33 +902,42 @@ export default function ScreenDiagram() {
       {/* ── Center Canvas ─────────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflow: "hidden", position: "relative", background: T.bg0 }}>
 
-        {/* Toolbar */}
+        {/* Info badge: node count + edge count — top-right */}
+        {graph && (
+          <div style={{
+            position: "absolute", top: 10, right: 10, zIndex: 10,
+            fontSize: 10, color: T.txt3, fontFamily: T.fontMono,
+            background: T.bg1, border: `1px solid ${T.border}`,
+            padding: "3px 10px", borderRadius: 4,
+            pointerEvents: "none", userSelect: "none",
+          }}>
+            {graph.nodes.length} files &middot; {graph.edges.length} imports
+          </div>
+        )}
+
+        {/* Zoom controls — bottom-right, stacked vertically */}
         <div style={{
-          position: "absolute", top: 10, right: 10, zIndex: 10,
-          display: "flex", gap: 6,
+          position: "absolute", bottom: 10, right: 10, zIndex: 10,
+          display: "flex", flexDirection: "column", gap: 2,
         }}>
-          <Btn variant="ghost" onClick={fitToView} title="Fit to view"
-            style={{ padding: "0 8px", height: 26, fontSize: 11 }}>
-            Fit
-          </Btn>
-          <Btn variant="ghost" title="Zoom in"
+          <ZoomButton
+            label="+"
+            title="Zoom in"
             onClick={() => setViewTransform(prev => ({ ...prev, scale: Math.min(3, prev.scale * 1.25) }))}
-            style={{ padding: "0 8px", height: 26, fontSize: 13 }}>
-            +
-          </Btn>
-          <Btn variant="ghost" title="Zoom out"
+          />
+          <ZoomButton
+            label={"\u2212"}
+            title="Zoom out"
             onClick={() => setViewTransform(prev => ({ ...prev, scale: Math.max(0.15, prev.scale * 0.8) }))}
-            style={{ padding: "0 8px", height: 26, fontSize: 13 }}>
-            -
-          </Btn>
-          <Btn variant="ghost" title="Reset view"
-            onClick={() => setViewTransform({ x: 0, y: 0, scale: 1 })}
-            style={{ padding: "0 8px", height: 26, fontSize: 11 }}>
-            Reset
-          </Btn>
+          />
+          <ZoomButton
+            label={"\u27F3"}
+            title="Fit to view"
+            onClick={fitToView}
+          />
         </div>
 
-        {/* Zoom indicator */}
+        {/* Zoom percentage — bottom-left */}
         <div style={{
           position: "absolute", bottom: 10, left: 10, zIndex: 10,
           fontSize: 10, color: T.txt3, fontFamily: T.fontMono,
@@ -875,9 +969,21 @@ export default function ScreenDiagram() {
           >
             {/* Dot grid pattern */}
             <defs>
-              <pattern id="dotGrid" width={20} height={20} patternUnits="userSpaceOnUse">
-                <circle cx={10} cy={10} r={0.8} fill={T.border} />
+              <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <circle cx="10" cy="10" r="1" fill={T.txt3} opacity="0.15" />
               </pattern>
+              {/* Arrowhead marker for normal edges */}
+              <marker id="arrowNormal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill={T.txt3} opacity="0.4" />
+              </marker>
+              {/* Arrowhead marker for highlighted edges */}
+              <marker id="arrowHighlight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill={T.blue} />
+              </marker>
+              {/* Arrowhead marker for cycle edges */}
+              <marker id="arrowCycle" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill={T.red} opacity="0.9" />
+              </marker>
             </defs>
             <rect width="100%" height="100%" fill="url(#dotGrid)" />
 
