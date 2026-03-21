@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { T } from "../tokens";
 import { Btn, PanelHeader, Badge, Input } from "../components";
-import { useShinra, highlightTS } from "./ShinraApp";
+import { useShinra, highlightTS, highlightLine } from "./ShinraApp";
 
 // ── File extension → icon / color mapping ───────────────────────────────────
 const EXT_META = {
@@ -216,8 +216,8 @@ function EditorTab({ filePath, isActive, onSelect, onClose, modified }) {
 }
 
 // ── CodeLine (extracted to avoid hooks-in-map) ──────────────────────────────
-function CodeLine({ lineNum, text, gutterWidth }) {
-  const tokens = useMemo(() => highlightTS(text), [text]);
+function CodeLine({ lineNum, text, gutterWidth, ext }) {
+  const tokens = useMemo(() => highlightLine(text, ext || "ts"), [text, ext]);
 
   return (
     <div style={{ display: "flex", minHeight: 20, lineHeight: "20px" }}>
@@ -362,6 +362,7 @@ function ScreenEditor() {
     openFiles, setOpenFiles,
     activeFile, setActiveFile,
     filePaletteOpen, setFilePaletteOpen,
+    invalidateFile,
   } = useShinra();
 
   // File tree state
@@ -558,9 +559,11 @@ function ScreenEditor() {
           modified: false,
         },
       }));
+      // Trigger incremental re-index for this file
+      if (invalidateFile) invalidateFile(activeFile);
     } catch {}
     setSaving(false);
-  }, [activeFile, fileContents]);
+  }, [activeFile, fileContents, invalidateFile]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -791,6 +794,11 @@ function ScreenEditor() {
   // ── Derived values ────────────────────────────────────────────────────────
   const activeContent = activeFile && fileContents[activeFile] ? fileContents[activeFile].content : "";
   const activeModified = activeFile && fileContents[activeFile] ? fileContents[activeFile].modified : false;
+  const activeExt = useMemo(() => {
+    if (!activeFile) return "ts";
+    const parts = activeFile.split(".");
+    return parts.length > 1 ? parts.pop().toLowerCase() : "ts";
+  }, [activeFile]);
   const lines = useMemo(() => activeContent.split("\n"), [activeContent]);
   const gutterWidth = useMemo(() => Math.max(String(lines.length).length * 9 + 16, 40), [lines.length]);
   const visibleLines = Math.floor(editorHeight / 20);
@@ -990,6 +998,7 @@ function ScreenEditor() {
                         lineNum={i + 1}
                         text={line}
                         gutterWidth={gutterWidth}
+                        ext={activeExt}
                       />
                     ))}
                   </div>

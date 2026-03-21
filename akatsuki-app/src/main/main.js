@@ -1561,6 +1561,47 @@ ipcMain.handle("shinra:select-folder", async () => {
   return { path: result.filePaths[0] };
 });
 
+// ── Shinra file watcher ──────────────────────────────────────────────────────
+let _fsWatcher = null;
+let _fsChangeBuf = new Set();
+let _fsChangeTimer = null;
+
+ipcMain.handle("shinra:watch-start", async (_, { dir, extensions }) => {
+  if (_fsWatcher) { _fsWatcher.close(); _fsWatcher = null; }
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  if (!win || !dir) return { ok: false };
+  const IGNORED = new Set(["node_modules", ".git", "dist", "build", ".next", "coverage", "__pycache__", ".cache", ".turbo", "venv", ".venv", "target", "vendor"]);
+  const extSet = extensions ? new Set(extensions) : null;
+  try {
+    _fsWatcher = fs.watch(dir, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+      const parts = filename.split(path.sep);
+      if (parts.some(p => IGNORED.has(p))) return;
+      const ext = path.extname(filename).slice(1);
+      if (extSet && !extSet.has(ext)) return;
+      const fullPath = path.join(dir, filename);
+      _fsChangeBuf.add(fullPath);
+      if (_fsChangeTimer) clearTimeout(_fsChangeTimer);
+      _fsChangeTimer = setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send("shinra:fs-changed-batch", { paths: Array.from(_fsChangeBuf) });
+        }
+        _fsChangeBuf.clear();
+      }, 300);
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle("shinra:watch-stop", async () => {
+  if (_fsWatcher) { _fsWatcher.close(); _fsWatcher = null; }
+  if (_fsChangeTimer) { clearTimeout(_fsChangeTimer); _fsChangeTimer = null; }
+  _fsChangeBuf.clear();
+  return { ok: true };
+});
+
 ipcMain.handle("memory:save-review", (_, p) => memSaveReview(p));
 ipcMain.handle("memory:update-outcome", (_, id, outcome) => memUpdateOutcome(id, outcome));
 ipcMain.handle("memory:query-context", (_, p) => memQueryContext(p));

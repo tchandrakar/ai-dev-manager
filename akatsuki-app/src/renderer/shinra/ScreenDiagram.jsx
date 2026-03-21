@@ -4,12 +4,6 @@ import { Btn, PanelHeader, Badge } from "../components";
 import { useShinra } from "./ShinraApp";
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const JS_EXTENSIONS = new Set([".js", ".ts", ".jsx", ".tsx"]);
-const PY_EXTENSIONS = new Set([".py"]);
-const GO_EXTENSIONS = new Set([".go"]);
-const RS_EXTENSIONS = new Set([".rs"]);
-const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "coverage", "__pycache__", ".cache", ".turbo", "venv", ".venv", "target", "vendor"]);
-
 const NODE_W = 160;
 const NODE_H = 40;
 
@@ -36,121 +30,6 @@ function extOf(name) {
 function shortName(fullPath, workingDir) {
   if (!workingDir) return fullPath;
   return fullPath.startsWith(workingDir) ? fullPath.slice(workingDir.length + 1) : fullPath;
-}
-
-function resolveImportPath(importPath, currentFile, fileSet, workDir) {
-  const ext = extOf(currentFile);
-
-  // Python: resolve dotted module paths
-  if (ext === ".py") {
-    if (importPath.startsWith(".")) {
-      const dir = currentFile.substring(0, currentFile.lastIndexOf("/"));
-      const dots = importPath.match(/^\.+/)[0].length;
-      let base = dir;
-      for (let i = 1; i < dots; i++) base = base.substring(0, base.lastIndexOf("/"));
-      const rest = importPath.replace(/^\.+/, "").replace(/\./g, "/");
-      const candidate = base + (rest ? "/" + rest : "");
-      if (fileSet.has(candidate + ".py")) return candidate + ".py";
-      if (fileSet.has(candidate + "/__init__.py")) return candidate + "/__init__.py";
-      return null;
-    }
-    // Absolute python import — try relative to workDir
-    if (workDir) {
-      const modPath = workDir + "/" + importPath.replace(/\./g, "/");
-      if (fileSet.has(modPath + ".py")) return modPath + ".py";
-      if (fileSet.has(modPath + "/__init__.py")) return modPath + "/__init__.py";
-    }
-    return null;
-  }
-
-  // Go: match by package directory name in fileSet
-  if (ext === ".go") {
-    // For local imports, try to find files in matching package dir
-    for (const fp of fileSet) {
-      const fpDir = fp.substring(0, fp.lastIndexOf("/"));
-      if (fpDir.endsWith(importPath) || fpDir.endsWith("/" + importPath.split("/").pop())) return fp;
-    }
-    return null;
-  }
-
-  // Rust: resolve mod/use paths
-  if (ext === ".rs") {
-    const dir = currentFile.substring(0, currentFile.lastIndexOf("/"));
-    const modName = importPath.replace(/::/g, "/").replace(/^crate/, "").replace(/^self/, "");
-    if (fileSet.has(dir + "/" + modName + ".rs")) return dir + "/" + modName + ".rs";
-    if (fileSet.has(dir + "/" + modName + "/mod.rs")) return dir + "/" + modName + "/mod.rs";
-    if (workDir) {
-      const fromRoot = workDir + "/src" + (modName.startsWith("/") ? modName : "/" + modName);
-      if (fileSet.has(fromRoot + ".rs")) return fromRoot + ".rs";
-      if (fileSet.has(fromRoot + "/mod.rs")) return fromRoot + "/mod.rs";
-    }
-    return null;
-  }
-
-  // JS/TS: Skip node_modules / bare specifiers
-  if (!importPath.startsWith(".") && !importPath.startsWith("/")) return null;
-
-  // Build absolute from relative
-  const dir = currentFile.substring(0, currentFile.lastIndexOf("/"));
-  const parts = (importPath.startsWith("/") ? importPath : dir + "/" + importPath).split("/");
-  const resolved = [];
-  for (const p of parts) {
-    if (p === "" || p === ".") continue;
-    if (p === "..") { resolved.pop(); continue; }
-    resolved.push(p);
-  }
-  const base = "/" + resolved.join("/");
-
-  // Try exact match, then with extensions, then /index
-  if (fileSet.has(base)) return base;
-  for (const jsExt of [".ts", ".tsx", ".js", ".jsx"]) {
-    if (fileSet.has(base + jsExt)) return base + jsExt;
-  }
-  for (const jsExt of ["/index.ts", "/index.tsx", "/index.js", "/index.jsx"]) {
-    if (fileSet.has(base + jsExt)) return base + jsExt;
-  }
-  return null;
-}
-
-// Extract import/require paths from source — supports JS/TS, Python, Go, Rust
-function extractImports(source, filePath) {
-  const paths = [];
-  const ext = extOf(filePath || "");
-  let m;
-
-  if (ext === ".py") {
-    // Python: from X import Y, import X
-    const fromRe = /^\s*from\s+([a-zA-Z0-9_.]+)\s+import/gm;
-    while ((m = fromRe.exec(source)) !== null) paths.push(m[1]);
-    const impRe = /^\s*import\s+([a-zA-Z0-9_.]+)/gm;
-    while ((m = impRe.exec(source)) !== null) paths.push(m[1]);
-  } else if (ext === ".go") {
-    // Go: import "path" or import ( "path" ... )
-    const singleRe = /^\s*import\s+"([^"]+)"/gm;
-    while ((m = singleRe.exec(source)) !== null) paths.push(m[1]);
-    const blockRe = /import\s*\(([\s\S]*?)\)/g;
-    while ((m = blockRe.exec(source)) !== null) {
-      const block = m[1];
-      const lineRe = /\s*(?:\w+\s+)?"([^"]+)"/g;
-      let lm;
-      while ((lm = lineRe.exec(block)) !== null) paths.push(lm[1]);
-    }
-  } else if (ext === ".rs") {
-    // Rust: use crate::X, use X::Y, mod X;
-    const useRe = /^\s*use\s+([a-zA-Z0-9_:]+)/gm;
-    while ((m = useRe.exec(source)) !== null) paths.push(m[1].split("::").slice(0, 2).join("::"));
-    const modRe = /^\s*mod\s+([a-zA-Z0-9_]+)\s*;/gm;
-    while ((m = modRe.exec(source)) !== null) paths.push(m[1]);
-  } else {
-    // JS/TS: import ... from '...', require('...'), export ... from '...'
-    const importRe = /import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
-    while ((m = importRe.exec(source)) !== null) paths.push(m[1]);
-    const reqRe = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-    while ((m = reqRe.exec(source)) !== null) paths.push(m[1]);
-    const exportRe = /export\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
-    while ((m = exportRe.exec(source)) !== null) paths.push(m[1]);
-  }
-  return paths;
 }
 
 // Simple force-directed layout
@@ -456,62 +335,67 @@ function ImportListItem({ fileId, workingDir, onClick }) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function ScreenDiagram() {
-  const { workingDir } = useShinra();
+  const {
+    workingDir, setOpenFiles, setActiveFile, setActiveTab,
+    indexStatus, indexProgress, importGraph, indexFileList, repoType, fullScan,
+  } = useShinra();
 
-  // Scan settings
-  const [maxDepth, setMaxDepth] = useState(8);
+  // Filters for which file types to show
   const [filters, setFilters] = useState({ js: true, ts: true, jsx: true, tsx: true, py: false, go: false, rs: false });
-  const [repoType, setRepoType] = useState(null); // "node", "python", "go", "rust", "mixed"
-  const [autoScanned, setAutoScanned] = useState(false);
 
-  // Graph data
-  const [graph, setGraph] = useState(null); // { nodes: [{id, name}], edges: [{from, to}] }
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState(null);
-
-  // Auto-detect repo type when workingDir changes
+  // Auto-set filters based on repo type
   useEffect(() => {
-    if (!workingDir) { setRepoType(null); setAutoScanned(false); return; }
-    let canceled = false;
-    (async () => {
-      try {
-        const res = await window.akatsuki.shinra.readDir(workingDir);
-        if (canceled) return;
-        const names = (res.entries || []).map(e => e.name);
-        const hasPackageJson = names.includes("package.json");
-        const hasRequirements = names.includes("requirements.txt") || names.includes("pyproject.toml") || names.includes("setup.py") || names.includes("Pipfile");
-        const hasGoMod = names.includes("go.mod");
-        const hasCargoToml = names.includes("Cargo.toml");
+    if (!repoType) return;
+    const newFilters = { js: false, ts: false, jsx: false, tsx: false, py: false, go: false, rs: false };
+    if (repoType === "node" || repoType === "mixed") {
+      newFilters.js = true; newFilters.ts = true; newFilters.jsx = true; newFilters.tsx = true;
+    }
+    if (repoType === "python") newFilters.py = true;
+    if (repoType === "go") newFilters.go = true;
+    if (repoType === "rust") newFilters.rs = true;
+    setFilters(newFilters);
+  }, [repoType]);
 
-        let detected = "mixed";
-        const newFilters = { js: false, ts: false, jsx: false, tsx: false, py: false, go: false, rs: false };
+  // Derive graph from shared index based on local filters
+  const graph = useMemo(() => {
+    if (!importGraph || !indexFileList.length) return null;
 
-        if (hasPackageJson) {
-          detected = "node";
-          newFilters.js = true; newFilters.ts = true; newFilters.jsx = true; newFilters.tsx = true;
-        } else if (hasGoMod) {
-          detected = "go";
-          newFilters.go = true;
-        } else if (hasCargoToml) {
-          detected = "rust";
-          newFilters.rs = true;
-        } else if (hasRequirements) {
-          detected = "python";
-          newFilters.py = true;
-        } else {
-          // Default to JS/TS
-          newFilters.js = true; newFilters.ts = true; newFilters.jsx = true; newFilters.tsx = true;
-        }
+    const activeExts = new Set();
+    if (filters.js) activeExts.add(".js");
+    if (filters.ts) activeExts.add(".ts");
+    if (filters.jsx) activeExts.add(".jsx");
+    if (filters.tsx) activeExts.add(".tsx");
+    if (filters.py) activeExts.add(".py");
+    if (filters.go) activeExts.add(".go");
+    if (filters.rs) activeExts.add(".rs");
 
-        if (!canceled) {
-          setRepoType(detected);
-          setFilters(newFilters);
-          setAutoScanned(false);
-        }
-      } catch {}
-    })();
-    return () => { canceled = true; };
-  }, [workingDir]);
+    const filteredFiles = indexFileList.filter(fp => {
+      const ext = extOf(fp.split("/").pop());
+      return activeExts.has(ext);
+    });
+    const filteredSet = new Set(filteredFiles);
+
+    const nodes = filteredFiles.map(fp => ({ id: fp, name: fp.split("/").pop() }));
+    const edges = importGraph.edges.filter(e => filteredSet.has(e.from) && filteredSet.has(e.to));
+
+    // Deduplicate edges
+    const edgeSet = new Set();
+    const uniqueEdges = [];
+    for (const e of edges) {
+      const key = `${e.from}|${e.to}`;
+      if (!edgeSet.has(key)) { edgeSet.add(key); uniqueEdges.push(e); }
+    }
+
+    const importMap = {};
+    const importedByMap = {};
+    for (const fp of filteredFiles) {
+      importMap[fp] = (importGraph.importMap[fp] || []).filter(x => filteredSet.has(x));
+      importedByMap[fp] = (importGraph.importedByMap[fp] || []).filter(x => filteredSet.has(x));
+    }
+    return { nodes, edges: uniqueEdges, importMap, importedByMap };
+  }, [importGraph, indexFileList, filters]);
+
+  const scanning = indexStatus === "scanning";
 
   // UI state
   const [selectedNode, setSelectedNode] = useState(null);
@@ -526,116 +410,21 @@ export default function ScreenDiagram() {
   const dragOffset = useRef({ x: 0, y: 0 });
   const svgRef = useRef(null);
 
-  // ── Scan project ───────────────────────────────────────────────────────────
-  const scanProject = useCallback(async () => {
-    if (!workingDir) return;
-    setScanning(true);
-    setScanError(null);
-    setSelectedNode(null);
-
-    try {
-      const activeExts = new Set();
-      if (filters.js) activeExts.add(".js");
-      if (filters.ts) activeExts.add(".ts");
-      if (filters.jsx) activeExts.add(".jsx");
-      if (filters.tsx) activeExts.add(".tsx");
-      if (filters.py) activeExts.add(".py");
-      if (filters.go) activeExts.add(".go");
-      if (filters.rs) activeExts.add(".rs");
-
-      // Recursively walk the directory
-      const allFiles = [];
-
-      async function walk(dir, depth) {
-        if (depth > maxDepth) return;
-        let result;
-        try {
-          result = await window.akatsuki.shinra.readDir(dir);
-        } catch {
-          return;
-        }
-        if (!result || !result.entries) return;
-
-        for (const entry of result.entries) {
-          if (entry.isDir) {
-            if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
-              await walk(entry.path, depth + 1);
-            }
-          } else {
-            const ext = extOf(entry.name);
-            if (activeExts.has(ext)) {
-              allFiles.push(entry.path);
-            }
-          }
-        }
-      }
-
-      await walk(workingDir, 0);
-
-      const fileSet = new Set(allFiles);
-      const nodes = [];
-      const edges = [];
-      const importMap = {}; // fileId -> [imported file ids]
-      const importedByMap = {}; // fileId -> [files that import it]
-
-      // Initialize maps
-      for (const fp of allFiles) {
-        importMap[fp] = [];
-        importedByMap[fp] = [];
-      }
-
-      // Read each file and extract imports
-      for (const fp of allFiles) {
-        let content;
-        try {
-          const res = await window.akatsuki.shinra.readFile(fp);
-          content = res.content || "";
-        } catch {
-          content = "";
-        }
-
-        const importPaths = extractImports(content, fp);
-        const name = fp.split("/").pop();
-
-        nodes.push({ id: fp, name });
-
-        for (const imp of importPaths) {
-          const resolved = resolveImportPath(imp, fp, fileSet, workingDir);
-          if (resolved && resolved !== fp) {
-            edges.push({ from: fp, to: resolved });
-            importMap[fp].push(resolved);
-            if (importedByMap[resolved]) {
-              importedByMap[resolved].push(fp);
-            }
-          }
-        }
-      }
-
-      // Deduplicate edges
-      const edgeSet = new Set();
-      const uniqueEdges = [];
-      for (const e of edges) {
-        const key = `${e.from}|${e.to}`;
-        if (!edgeSet.has(key)) {
-          edgeSet.add(key);
-          uniqueEdges.push(e);
-        }
-      }
-
-      setGraph({ nodes, edges: uniqueEdges, importMap, importedByMap });
-
-      // Layout
-      const laid = layoutNodes(nodes, uniqueEdges);
+  // Auto-layout when graph changes
+  useEffect(() => {
+    if (graph && graph.nodes.length > 0) {
+      const laid = layoutNodes(graph.nodes, graph.edges);
       setPositions(laid);
-
-      // Reset view to center
       setViewTransform({ x: 0, y: 0, scale: 1 });
-    } catch (err) {
-      setScanError(err.message || "Scan failed");
-    } finally {
-      setScanning(false);
     }
-  }, [workingDir, maxDepth, filters]);
+  }, [graph]);
+
+  // Open file in editor from graph
+  const handleOpenInEditor = useCallback((filePath) => {
+    setOpenFiles((prev) => prev.includes(filePath) ? prev : [...prev, filePath]);
+    setActiveFile(filePath);
+    setActiveTab("editor");
+  }, [setOpenFiles, setActiveFile, setActiveTab]);
 
   // ── Cycles + orphans (derived) ─────────────────────────────────────────────
   const cycles = useMemo(() => {
@@ -854,37 +643,28 @@ export default function ScreenDiagram() {
 
         {/* Controls */}
         <div style={{ padding: "10px 12px", borderBottom: `1px solid ${T.border}` }}>
-          <Btn
-            variant="primary"
-            onClick={scanProject}
-            disabled={scanning}
-            style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}
-          >
-            {scanning ? "Scanning..." : "Scan Project"}
-          </Btn>
-
-          {/* Max Depth */}
-          <div style={{ marginBottom: 8 }}>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              marginBottom: 4,
-            }}>
-              <span style={{ fontSize: 10, color: T.txt2 }}>Max Depth</span>
-              <span style={{ fontSize: 10, color: T.txt3, fontFamily: T.fontMono }}>{maxDepth}</span>
+          {scanning ? (
+            <div style={{ width: "100%", marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: T.txt2, marginBottom: 4 }}>
+                Indexing... {indexProgress.scanned}/{indexProgress.total} files
+              </div>
+              <div style={{ height: 4, background: T.bg3, borderRadius: 2, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 2, background: T.cyan,
+                  width: indexProgress.total ? `${(indexProgress.scanned / indexProgress.total) * 100}%` : "0%",
+                  transition: "width 0.2s",
+                }} />
+              </div>
             </div>
-            <input
-              type="range"
-              min={1}
-              max={20}
-              value={maxDepth}
-              onChange={(e) => setMaxDepth(Number(e.target.value))}
-              style={{
-                width: "100%", height: 4, appearance: "none", background: T.bg3,
-                borderRadius: 2, outline: "none", cursor: "pointer",
-                accentColor: T.cyan,
-              }}
-            />
-          </div>
+          ) : (
+            <Btn
+              variant="ghost"
+              onClick={fullScan}
+              style={{ width: "100%", justifyContent: "center", marginBottom: 10, fontSize: 10 }}
+            >
+              Re-scan Project
+            </Btn>
+          )}
 
           {/* File Filters */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -932,12 +712,12 @@ export default function ScreenDiagram() {
           </div>
         </div>
 
-        {scanError && (
+        {indexStatus === "error" && (
           <div style={{
             padding: "8px 12px", fontSize: 11, color: T.red, background: `${T.red}10`,
             borderBottom: `1px solid ${T.border}`,
           }}>
-            {scanError}
+            Index error — try re-scanning
           </div>
         )}
 

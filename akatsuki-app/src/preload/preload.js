@@ -80,5 +80,9 @@ contextBridge.exposeInMainWorld("akatsuki", {
       ipcRenderer.removeAllListeners("shinra:shell-stderr");
       ipcRenderer.removeAllListeners("shinra:shell-exit");
     },
+    watchStart: (opts) => ipcRenderer.invoke("shinra:watch-start", opts),
+    watchStop: () => ipcRenderer.invoke("shinra:watch-stop"),
+    onFsChanged: (cb) => { ipcRenderer.on("shinra:fs-changed-batch", (_, data) => cb(data)); },
+    removeFsListeners: () => { ipcRenderer.removeAllListeners("shinra:fs-changed-batch"); },
   },
 });

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { T } from "../tokens";
+import useRepositoryIndex from "./useRepositoryIndex";
 
 // ── localStorage persistence helpers ─────────────────────────────────────────
 const LS_PREFIX = "shinra:";
@@ -155,6 +156,364 @@ export function highlightTS(line) {
   return tokens;
 }
 
+// ── Multi-language syntax highlighting ────────────────────────────────────────
+
+// Markdown
+export function highlightMD(line) {
+  // Headings
+  const headingMatch = line.match(/^(#{1,6})\s/);
+  if (headingMatch) {
+    return [
+      { text: headingMatch[1] + " ", color: T.purple, bold: true },
+      { text: line.slice(headingMatch[0].length), color: T.txt, bold: true },
+    ];
+  }
+  // Code blocks
+  if (line.startsWith("```")) return [{ text: line, color: T.green }];
+  // Blockquotes
+  if (line.startsWith("> ")) return [{ text: "> ", color: T.txt3 }, { text: line.slice(2), color: T.txt2 }];
+  // Lists
+  if (/^(\s*[-*+]\s)/.test(line)) {
+    const m = line.match(/^(\s*[-*+]\s)/);
+    return [{ text: m[1], color: T.amber }, { text: line.slice(m[1].length), color: T.txt }];
+  }
+  // Numbered lists
+  if (/^(\s*\d+\.\s)/.test(line)) {
+    const m = line.match(/^(\s*\d+\.\s)/);
+    return [{ text: m[1], color: T.amber }, { text: line.slice(m[1].length), color: T.txt }];
+  }
+  // Horizontal rules
+  if (/^[-*_]{3,}\s*$/.test(line)) return [{ text: line, color: T.txt3 }];
+  // Inline: bold, italic, code, links
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === "`") {
+      const end = line.indexOf("`", i + 1);
+      if (end > i) { tokens.push({ text: line.slice(i, end + 1), color: T.green }); i = end + 1; continue; }
+    }
+    if (line[i] === "*" && line[i + 1] === "*") {
+      const end = line.indexOf("**", i + 2);
+      if (end > i) { tokens.push({ text: line.slice(i, end + 2), color: T.txt, bold: true }); i = end + 2; continue; }
+    }
+    if (line[i] === "[") {
+      const close = line.indexOf("](", i);
+      if (close > i) {
+        const pEnd = line.indexOf(")", close);
+        if (pEnd > close) { tokens.push({ text: line.slice(i, pEnd + 1), color: T.blue }); i = pEnd + 1; continue; }
+      }
+    }
+    tokens.push({ text: line[i], color: T.txt });
+    i++;
+  }
+  return tokens;
+}
+
+// JSON
+export function highlightJSON(line) {
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '"') {
+      let j = i + 1;
+      while (j < line.length && line[j] !== '"') { if (line[j] === "\\") j++; j++; }
+      j++;
+      const str = line.slice(i, j);
+      // Check if it's a key (followed by :)
+      const rest = line.slice(j).trimStart();
+      tokens.push({ text: str, color: rest.startsWith(":") ? T.cyan : T.green });
+      i = j; continue;
+    }
+    if (/\d/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[\d.eE+\-]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber });
+      i = j; continue;
+    }
+    if (line.slice(i, i + 4) === "true" || line.slice(i, i + 5) === "false") {
+      const w = line.slice(i, i + 4) === "true" ? "true" : "false";
+      tokens.push({ text: w, color: T.purple, bold: true });
+      i += w.length; continue;
+    }
+    if (line.slice(i, i + 4) === "null") {
+      tokens.push({ text: "null", color: T.purple, bold: true });
+      i += 4; continue;
+    }
+    tokens.push({ text: line[i], color: /[{}[\]:,]/.test(line[i]) ? T.txt2 : undefined });
+    i++;
+  }
+  return tokens;
+}
+
+// YAML
+export function highlightYAML(line) {
+  if (/^\s*#/.test(line)) return [{ text: line, color: T.txt3 }];
+  if (line.trim() === "---" || line.trim() === "...") return [{ text: line, color: T.purple }];
+  const kvMatch = line.match(/^(\s*)([\w.\-/]+)(\s*:\s*)(.*)/);
+  if (kvMatch) {
+    const tokens = [];
+    if (kvMatch[1]) tokens.push({ text: kvMatch[1], color: undefined });
+    tokens.push({ text: kvMatch[2], color: T.cyan });
+    tokens.push({ text: kvMatch[3], color: T.txt2 });
+    const val = kvMatch[4];
+    if (/^['"]/.test(val)) tokens.push({ text: val, color: T.green });
+    else if (/^(true|false|yes|no|on|off)$/i.test(val.trim())) tokens.push({ text: val, color: T.purple, bold: true });
+    else if (/^\d/.test(val.trim())) tokens.push({ text: val, color: T.amber });
+    else tokens.push({ text: val, color: T.txt });
+    return tokens;
+  }
+  if (/^\s*-\s/.test(line)) {
+    const m = line.match(/^(\s*-\s)(.*)/);
+    return [{ text: m[1], color: T.amber }, { text: m[2], color: T.txt }];
+  }
+  return [{ text: line, color: T.txt }];
+}
+
+// CSS / SCSS
+export function highlightCSS(line) {
+  if (/^\s*\/\//.test(line) || /^\s*\/\*/.test(line) || /^\s*\*/.test(line))
+    return [{ text: line, color: T.txt3 }];
+  // Property: value
+  const propMatch = line.match(/^(\s*)([\w-]+)(\s*:\s*)(.*)/);
+  if (propMatch) {
+    const tokens = [{ text: propMatch[1], color: undefined }];
+    tokens.push({ text: propMatch[2], color: T.cyan });
+    tokens.push({ text: propMatch[3], color: T.txt2 });
+    tokens.push({ text: propMatch[4], color: T.amber });
+    return tokens;
+  }
+  // Selectors
+  if (/[.#@&]/.test(line.trim()[0]) || /\{|\}/.test(line)) return [{ text: line, color: T.purple }];
+  return [{ text: line, color: T.txt }];
+}
+
+// Python
+const PY_KEYWORDS = new Set([
+  "import","from","def","class","return","if","elif","else","for","while","with","as",
+  "try","except","finally","raise","yield","lambda","pass","break","continue","and","or",
+  "not","is","in","True","False","None","self","async","await","global","nonlocal","del",
+  "assert","print",
+]);
+export function highlightPython(line) {
+  if (/^\s*#/.test(line)) return [{ text: line, color: T.txt3 }];
+  if (/^\s*("""|\'\'\')/.test(line)) return [{ text: line, color: T.green }];
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === "#") { tokens.push({ text: line.slice(i), color: T.txt3 }); break; }
+    if (line[i] === '"' || line[i] === "'") {
+      const q = line[i]; let j = i + 1;
+      while (j < line.length && line[j] !== q) { if (line[j] === "\\") j++; j++; }
+      j++;
+      tokens.push({ text: line.slice(i, j), color: T.green }); i = j; continue;
+    }
+    if (/\d/.test(line[i]) && (i === 0 || /[\s,=([\]{:+\-*/]/.test(line[i - 1]))) {
+      let j = i;
+      while (j < line.length && /[\d._xXoObB]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber }); i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      const w = line.slice(i, j);
+      if (PY_KEYWORDS.has(w)) tokens.push({ text: w, color: T.purple, bold: true });
+      else if (w[0] === w[0].toUpperCase() && /[a-z]/.test(w)) tokens.push({ text: w, color: T.cyan });
+      else if (j < line.length && line[j] === "(") tokens.push({ text: w, color: T.blue });
+      else tokens.push({ text: w, color: T.txt });
+      i = j; continue;
+    }
+    if (line[i] === "@") {
+      let j = i + 1;
+      while (j < line.length && /[a-zA-Z0-9_.]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber }); i = j; continue;
+    }
+    tokens.push({ text: line[i], color: /[><=!+\-*/%&|^~]/.test(line[i]) ? T.txt2 : undefined });
+    i++;
+  }
+  return tokens;
+}
+
+// Go
+const GO_KEYWORDS = new Set([
+  "package","import","func","return","if","else","for","range","switch","case","default",
+  "break","continue","go","defer","select","chan","type","struct","interface","map","var",
+  "const","true","false","nil","make","append","len","cap","new","delete","panic","recover",
+]);
+export function highlightGo(line) {
+  if (/^\s*\/\//.test(line)) return [{ text: line, color: T.txt3 }];
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '"' || line[i] === "`") {
+      const q = line[i]; let j = i + 1;
+      while (j < line.length && line[j] !== q) { if (q === '"' && line[j] === "\\") j++; j++; }
+      j++;
+      tokens.push({ text: line.slice(i, j), color: T.green }); i = j; continue;
+    }
+    if (/\d/.test(line[i]) && (i === 0 || /[\s,=([\]{:+\-*/]/.test(line[i - 1]))) {
+      let j = i;
+      while (j < line.length && /[\d.xXoO_]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber }); i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      const w = line.slice(i, j);
+      if (GO_KEYWORDS.has(w)) tokens.push({ text: w, color: T.purple, bold: true });
+      else if (w[0] === w[0].toUpperCase()) tokens.push({ text: w, color: T.cyan });
+      else if (j < line.length && line[j] === "(") tokens.push({ text: w, color: T.blue });
+      else tokens.push({ text: w, color: T.txt });
+      i = j; continue;
+    }
+    tokens.push({ text: line[i], color: /[><=!+\-*/%&|^~:]/.test(line[i]) ? T.txt2 : undefined });
+    i++;
+  }
+  return tokens;
+}
+
+// Rust
+const RS_KEYWORDS = new Set([
+  "use","mod","fn","let","mut","const","pub","struct","enum","impl","trait","where","match",
+  "if","else","for","while","loop","return","break","continue","as","in","ref","self","Self",
+  "super","crate","async","await","move","dyn","type","unsafe","extern","true","false",
+  "Some","None","Ok","Err","Box","Vec","String","Option","Result","println","eprintln","macro_rules",
+]);
+export function highlightRust(line) {
+  if (/^\s*\/\//.test(line)) return [{ text: line, color: T.txt3 }];
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '"') {
+      let j = i + 1;
+      while (j < line.length && line[j] !== '"') { if (line[j] === "\\") j++; j++; }
+      j++;
+      tokens.push({ text: line.slice(i, j), color: T.green }); i = j; continue;
+    }
+    if (/\d/.test(line[i]) && (i === 0 || /[\s,=([\]{:+\-*/]/.test(line[i - 1]))) {
+      let j = i;
+      while (j < line.length && /[\d._xXoObBuif]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber }); i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      const w = line.slice(i, j);
+      if (RS_KEYWORDS.has(w)) tokens.push({ text: w, color: T.purple, bold: true });
+      else if (w[0] === w[0].toUpperCase()) tokens.push({ text: w, color: T.cyan });
+      else if (j < line.length && (line[j] === "(" || line[j] === "!")) tokens.push({ text: w, color: T.blue });
+      else tokens.push({ text: w, color: T.txt });
+      i = j; continue;
+    }
+    if (line[i] === "#" && line[i + 1] === "[") {
+      const end = line.indexOf("]", i);
+      if (end > i) { tokens.push({ text: line.slice(i, end + 1), color: T.amber }); i = end + 1; continue; }
+    }
+    tokens.push({ text: line[i], color: /[><=!+\-*/%&|^~?:]/.test(line[i]) ? T.txt2 : undefined });
+    i++;
+  }
+  return tokens;
+}
+
+// Shell
+export function highlightShell(line) {
+  if (/^\s*#/.test(line)) return [{ text: line, color: T.txt3 }];
+  const SHELL_KW = new Set(["if","then","else","elif","fi","for","while","do","done","case","esac","in","function","return","exit","echo","export","source","set","unset","local","readonly","cd","pwd","ls","cat","grep","sed","awk","find","mkdir","rm","cp","mv","chmod","chown","curl","wget","git","docker","npm","yarn","node","python"]);
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '"' || line[i] === "'") {
+      const q = line[i]; let j = i + 1;
+      while (j < line.length && line[j] !== q) { if (q === '"' && line[j] === "\\") j++; j++; }
+      j++;
+      tokens.push({ text: line.slice(i, j), color: T.green }); i = j; continue;
+    }
+    if (line[i] === "$") {
+      let j = i + 1;
+      if (line[j] === "{") { const end = line.indexOf("}", j); if (end > j) { tokens.push({ text: line.slice(i, end + 1), color: T.cyan }); i = end + 1; continue; } }
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.cyan }); i = j; continue;
+    }
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_\-]/.test(line[j])) j++;
+      const w = line.slice(i, j);
+      if (SHELL_KW.has(w)) tokens.push({ text: w, color: T.purple, bold: true });
+      else if (w.startsWith("-")) tokens.push({ text: w, color: T.amber });
+      else tokens.push({ text: w, color: T.txt });
+      i = j; continue;
+    }
+    if (line[i] === "-") {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9\-]/.test(line[j])) j++;
+      tokens.push({ text: line.slice(i, j), color: T.amber }); i = j; continue;
+    }
+    tokens.push({ text: line[i], color: /[|>&;()]/.test(line[i]) ? T.txt2 : undefined });
+    i++;
+  }
+  return tokens;
+}
+
+// HTML
+export function highlightHTML(line) {
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line.slice(i, i + 4) === "<!--") {
+      const end = line.indexOf("-->", i + 4);
+      if (end > i) { tokens.push({ text: line.slice(i, end + 3), color: T.txt3 }); i = end + 3; continue; }
+      tokens.push({ text: line.slice(i), color: T.txt3 }); break;
+    }
+    if (line[i] === "<") {
+      let j = i + 1;
+      if (line[j] === "/") j++;
+      let tag = "";
+      while (j < line.length && /[a-zA-Z0-9\-]/.test(line[j])) { tag += line[j]; j++; }
+      if (tag) {
+        tokens.push({ text: line.slice(i, i + (line[i + 1] === "/" ? 2 : 1)), color: T.txt2 });
+        tokens.push({ text: tag, color: T.red });
+        i = j;
+        // Attributes
+        while (i < line.length && line[i] !== ">") {
+          if (/\s/.test(line[i])) { tokens.push({ text: line[i], color: undefined }); i++; continue; }
+          if (line[i] === '"' || line[i] === "'") {
+            const q = line[i]; let k = i + 1;
+            while (k < line.length && line[k] !== q) k++;
+            k++;
+            tokens.push({ text: line.slice(i, k), color: T.green }); i = k; continue;
+          }
+          if (line[i] === "=" || line[i] === "/") { tokens.push({ text: line[i], color: T.txt2 }); i++; continue; }
+          let k = i;
+          while (k < line.length && /[a-zA-Z0-9\-:]/.test(line[k])) k++;
+          if (k > i) { tokens.push({ text: line.slice(i, k), color: T.amber }); i = k; continue; }
+          tokens.push({ text: line[i], color: T.txt2 }); i++;
+        }
+        if (i < line.length && line[i] === ">") { tokens.push({ text: ">", color: T.txt2 }); i++; }
+        continue;
+      }
+    }
+    tokens.push({ text: line[i], color: T.txt }); i++;
+  }
+  return tokens;
+}
+
+// Dispatcher: pick highlighter by file extension
+const EXT_HIGHLIGHTER = {
+  js: highlightTS, jsx: highlightTS, ts: highlightTS, tsx: highlightTS, mjs: highlightTS, cjs: highlightTS,
+  json: highlightJSON, md: highlightMD,
+  yml: highlightYAML, yaml: highlightYAML, toml: highlightYAML,
+  css: highlightCSS, scss: highlightCSS,
+  py: highlightPython,
+  go: highlightGo,
+  rs: highlightRust,
+  sh: highlightShell, bash: highlightShell, zsh: highlightShell,
+  html: highlightHTML, htm: highlightHTML, xml: highlightHTML, svg: highlightHTML,
+};
+
+export function highlightLine(line, ext) {
+  const fn = EXT_HIGHLIGHTER[ext];
+  return fn ? fn(line) : highlightTS(line);
+}
+
 // ── Main ShinraApp component ─────────────────────────────────────────────────
 function ShinraApp({ initialTab, onNavigate }) {
   // Tab state — driven by parent sidebar
@@ -216,6 +575,26 @@ function ShinraApp({ initialTab, onNavigate }) {
   useEffect(() => {
     saveJSON("ai-history", aiHistory.slice(-100));
   }, [aiHistory]);
+
+  // ── Repository Index (shared by Dependency Graph + Call Graph) ───────────
+  const index = useRepositoryIndex(workingDir);
+
+  // File watcher: auto-invalidate on external file changes
+  useEffect(() => {
+    if (!workingDir) return;
+    window.akatsuki.shinra.watchStart({
+      dir: workingDir,
+      extensions: ["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "go", "rs"],
+    });
+    const handler = (data) => {
+      if (data && data.paths) index.invalidateFiles(data.paths);
+    };
+    window.akatsuki.shinra.onFsChanged(handler);
+    return () => {
+      window.akatsuki.shinra.watchStop();
+      window.akatsuki.shinra.removeFsListeners();
+    };
+  }, [workingDir, index.invalidateFiles]);
 
   // ── App-wide keyboard shortcuts ──────────────────────────────────────────
   const lastShiftRef = useRef(0);
@@ -291,6 +670,18 @@ function ShinraApp({ initialTab, onNavigate }) {
       searchOpen, setSearchOpen,
       filePaletteOpen, setFilePaletteOpen,
       aiHistory, setAiHistory,
+      // Repository index (shared by Dependency Graph + Call Graph)
+      indexStatus: index.status,
+      indexProgress: index.progress,
+      indexError: index.error,
+      repoType: index.repoType,
+      indexFileList: index.fileList,
+      indexFileSet: index.fileSet,
+      importGraph: index.importGraph,
+      functionMap: index.functionMap,
+      fullScan: index.fullScan,
+      invalidateFile: index.invalidateFile,
+      invalidateFiles: index.invalidateFiles,
     }),
     [
       activeTab, setActiveTab,
@@ -302,6 +693,9 @@ function ShinraApp({ initialTab, onNavigate }) {
       searchOpen,
       filePaletteOpen,
       aiHistory,
+      index.status, index.progress, index.error, index.repoType,
+      index.fileList, index.fileSet, index.importGraph, index.functionMap,
+      index.fullScan, index.invalidateFile, index.invalidateFiles,
     ]
   );
 
@@ -317,7 +711,9 @@ function ShinraApp({ initialTab, onNavigate }) {
       case "ai":
         return `AI Assistant | Claude Sonnet 4`;
       case "diagram":
-        return "Dependency Graph";
+        return index.status === "scanning"
+          ? `Indexing... ${index.progress.scanned}/${index.progress.total} files`
+          : `Dependency Graph | ${index.fileList.length} files indexed`;
       case "plugins":
         return `${plugins.filter(p => p.installed).length} installed | ${plugins.filter(p => !p.installed).length} available`;
       case "search":
@@ -325,7 +721,9 @@ function ShinraApp({ initialTab, onNavigate }) {
       case "config":
         return `${runConfigs.length} configuration${runConfigs.length !== 1 ? "s" : ""}`;
       case "callgraph":
-        return "Function Call Graph";
+        return index.status === "scanning"
+          ? `Indexing... ${index.progress.scanned}/${index.progress.total} files`
+          : `Function Call Graph | ${index.functionMap ? index.functionMap.size : 0} functions`;
       default:
         return "Shinra Tensei IDE";
     }

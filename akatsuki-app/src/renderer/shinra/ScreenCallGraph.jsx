@@ -4,7 +4,6 @@ import { Btn, PanelHeader, Badge, Spinner } from "../components";
 import { useShinra } from "./ShinraApp";
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const JS_EXTENSIONS = new Set(["js", "jsx", "ts", "tsx", "mjs", "cjs"]);
 const TYPE_COLORS = {
   export: T.blue,
   internal: T.green,
@@ -13,245 +12,6 @@ const TYPE_COLORS = {
 };
 const NODE_RADIUS = 28;
 const CENTER_RADIUS = 38;
-
-// ── Regex-based JS/TS parser ────────────────────────────────────────────────
-function parseFile(content, filePath) {
-  const lines = content.split("\n");
-  const functions = [];
-
-  // Track brace depth for function body extraction
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip comments
-    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
-
-    let match = null;
-    let fnName = null;
-    let isExported = false;
-    let isAsync = false;
-    let params = [];
-
-    // export async function name(...)
-    match = trimmed.match(/^(export\s+)?(async\s+)?function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)/);
-    if (match) {
-      isExported = !!match[1];
-      isAsync = !!match[2];
-      fnName = match[3];
-      params = parseParams(match[4]);
-    }
-
-    // export const name = (async)? (...) =>
-    if (!fnName) {
-      match = trimmed.match(/^(export\s+)?(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(async\s+)?\(([^)]*)\)\s*=>/);
-      if (match) {
-        isExported = !!match[1];
-        isAsync = !!match[4];
-        fnName = match[3];
-        params = parseParams(match[5]);
-      }
-    }
-
-    // export const name = (async)? function(...)
-    if (!fnName) {
-      match = trimmed.match(/^(export\s+)?(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(async\s+)?function\s*\(([^)]*)\)/);
-      if (match) {
-        isExported = !!match[1];
-        isAsync = !!match[4];
-        fnName = match[3];
-        params = parseParams(match[5]);
-      }
-    }
-
-    // Class method: name(...) { or async name(...) {
-    if (!fnName) {
-      match = trimmed.match(/^(async\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)\s*\{/);
-      if (match && !["if", "for", "while", "switch", "catch", "else", "return", "new", "import", "export"].includes(match[2])) {
-        isAsync = !!match[1];
-        fnName = match[2];
-        params = parseParams(match[3]);
-      }
-    }
-
-    if (!fnName) continue;
-
-    // Determine the function body by tracking braces
-    const startLine = i;
-    let braceCount = 0;
-    let bodyStarted = false;
-    let endLine = i;
-
-    for (let j = i; j < lines.length; j++) {
-      const l = lines[j];
-      for (let k = 0; k < l.length; k++) {
-        if (l[k] === "{") { braceCount++; bodyStarted = true; }
-        else if (l[k] === "}") { braceCount--; }
-      }
-      if (bodyStarted && braceCount <= 0) {
-        endLine = j;
-        break;
-      }
-      if (j === lines.length - 1) endLine = j;
-    }
-
-    const bodyLines = lines.slice(startLine, endLine + 1);
-    const body = bodyLines.join("\n");
-
-    // Detect calls within this function body
-    const calls = extractCalls(body, fnName);
-
-    // Infer return type
-    const returnType = inferReturnType(body, isAsync);
-
-    // Classify function type
-    let fnType = "internal";
-    if (isExported) fnType = "export";
-    else if (isAsync) fnType = "async";
-    else if (fnName.startsWith("on") || fnName.startsWith("handle") || params.some(p => p.name === "cb" || p.name === "callback" || p.name === "handler")) fnType = "callback";
-
-    functions.push({
-      name: fnName,
-      file: filePath,
-      startLine: startLine + 1,
-      endLine: endLine + 1,
-      params,
-      returnType,
-      type: fnType,
-      isAsync,
-      isExported,
-      calls,
-      body,
-    });
-  }
-
-  return functions;
-}
-
-function parseParams(paramStr) {
-  if (!paramStr || !paramStr.trim()) return [];
-  return paramStr.split(",").map((p) => {
-    const trimmed = p.trim();
-    // Handle TypeScript type annotations: name: Type
-    const colonMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$?]*)\s*:\s*(.+)/);
-    if (colonMatch) return { name: colonMatch[1], type: colonMatch[2].trim() };
-    // Handle default values: name = value
-    const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$?]*)\s*=\s*(.+)/);
-    if (eqMatch) {
-      const val = eqMatch[2].trim();
-      let type = "any";
-      if (val === "true" || val === "false") type = "boolean";
-      else if (/^['"`]/.test(val)) type = "string";
-      else if (/^\d/.test(val)) type = "number";
-      else if (val.startsWith("[")) type = "array";
-      else if (val.startsWith("{")) type = "object";
-      else if (val === "null") type = "null";
-      return { name: eqMatch[1], type };
-    }
-    // Destructured
-    if (trimmed.startsWith("{")) return { name: trimmed, type: "object" };
-    if (trimmed.startsWith("[")) return { name: trimmed, type: "array" };
-    // Rest param
-    if (trimmed.startsWith("...")) return { name: trimmed, type: "rest" };
-    // Simple identifier
-    const idMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$?]*)/);
-    if (idMatch) return { name: idMatch[1], type: "any" };
-    return { name: trimmed, type: "any" };
-  }).filter((p) => p.name);
-}
-
-function extractCalls(body, selfName) {
-  const calls = new Set();
-  // Match function calls: identifier(
-  const callRegex = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
-  let m;
-  while ((m = callRegex.exec(body)) !== null) {
-    const name = m[1];
-    // Skip self-recursion, keywords, and common built-ins
-    const skip = new Set([
-      selfName, "if", "for", "while", "switch", "catch", "return", "new", "typeof",
-      "instanceof", "delete", "void", "throw", "class", "import", "export",
-      "require", "console", "setTimeout", "setInterval", "clearTimeout",
-      "clearInterval", "parseInt", "parseFloat", "JSON", "Object", "Array",
-      "String", "Number", "Boolean", "Math", "Date", "Promise", "RegExp",
-      "Error", "Map", "Set", "Symbol", "Proxy", "Reflect",
-    ]);
-    if (!skip.has(name)) {
-      calls.add(name);
-    }
-  }
-  return Array.from(calls);
-}
-
-function inferReturnType(body, isAsync) {
-  if (/return\s+\[/.test(body)) return isAsync ? "Promise<array>" : "array";
-  if (/return\s+\{/.test(body)) return isAsync ? "Promise<object>" : "object";
-  if (/return\s+(true|false)/.test(body)) return isAsync ? "Promise<boolean>" : "boolean";
-  if (/return\s+['"`]/.test(body)) return isAsync ? "Promise<string>" : "string";
-  if (/return\s+\d/.test(body)) return isAsync ? "Promise<number>" : "number";
-  if (/return\s+null/.test(body)) return isAsync ? "Promise<null>" : "null";
-  if (/return\s+</.test(body)) return "JSX.Element";
-  if (/return\s+\([\s]*</.test(body)) return "JSX.Element";
-  if (!/\breturn\b/.test(body)) return isAsync ? "Promise<void>" : "void";
-  return isAsync ? "Promise<any>" : "any";
-}
-
-// ── Build call graph from parsed functions ──────────────────────────────────
-function buildCallGraph(allFunctions) {
-  const fnMap = new Map();
-  for (const fn of allFunctions) {
-    const key = `${fn.name}:${fn.file}`;
-    fnMap.set(key, { ...fn, incomingKeys: [], outgoingKeys: [] });
-  }
-  // Also index by name for cross-file resolution
-  const nameIndex = new Map();
-  for (const [key, fn] of fnMap) {
-    if (!nameIndex.has(fn.name)) nameIndex.set(fn.name, []);
-    nameIndex.get(fn.name).push(key);
-  }
-
-  // Build edges
-  for (const [callerKey, callerFn] of fnMap) {
-    for (const calleeName of callerFn.calls) {
-      // Try same-file first
-      const sameFileKey = `${calleeName}:${callerFn.file}`;
-      if (fnMap.has(sameFileKey)) {
-        callerFn.outgoingKeys.push(sameFileKey);
-        fnMap.get(sameFileKey).incomingKeys.push(callerKey);
-      } else if (nameIndex.has(calleeName)) {
-        // Cross-file: pick first match
-        const targetKey = nameIndex.get(calleeName)[0];
-        callerFn.outgoingKeys.push(targetKey);
-        fnMap.get(targetKey).incomingKeys.push(callerKey);
-      }
-    }
-  }
-
-  return fnMap;
-}
-
-// ── Collect all JS/TS files recursively ─────────────────────────────────────
-async function collectJSFiles(dir, maxDepth = 6, depth = 0) {
-  if (depth > maxDepth) return [];
-  let result = [];
-  try {
-    const { entries } = await window.akatsuki.shinra.readDir(dir);
-    for (const entry of entries) {
-      if (entry.isDir) {
-        // Skip node_modules, .git, dist, build
-        if (["node_modules", ".git", "dist", "build", ".next", "coverage", "__pycache__"].includes(entry.name)) continue;
-        const sub = await collectJSFiles(entry.path, maxDepth, depth + 1);
-        result = result.concat(sub);
-      } else {
-        const ext = entry.name.split(".").pop();
-        if (JS_EXTENSIONS.has(ext)) {
-          result.push(entry.path);
-        }
-      }
-    }
-  } catch {}
-  return result;
-}
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
@@ -468,9 +228,11 @@ function CallEdge({ x1, y1, x2, y2, color, direction }) {
 // ── ScreenCallGraph ─────────────────────────────────────────────────────────
 
 function ScreenCallGraph() {
-  const { workingDir, activeFile, openFiles, setActiveFile } = useShinra();
+  const {
+    workingDir, activeFile, openFiles, setOpenFiles, setActiveFile, setActiveTab,
+    indexStatus, functionMap: sharedFunctionMap, fullScan,
+  } = useShinra();
 
-  const [analyzing, setAnalyzing] = useState(false);
   const [graphData, setGraphData] = useState(null); // Map from buildCallGraph
   const [selectedKey, setSelectedKey] = useState(null);
   const [depth, setDepth] = useState(2);
@@ -479,6 +241,8 @@ function ScreenCallGraph() {
   const [fileDropOpen, setFileDropOpen] = useState(false);
   const svgRef = useRef(null);
   const dropRef = useRef(null);
+
+  const analyzing = indexStatus === "scanning";
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -514,55 +278,45 @@ function ScreenCallGraph() {
     return opts;
   }, [openFiles, activeFile]);
 
-  // ── Analyze ─────────────────────────────────────────────────────────────
-  const handleAnalyze = useCallback(async () => {
-    setAnalyzing(true);
+  // ── Analyze — now instant, reads from shared index ──────────────────────
+  const handleAnalyze = useCallback(() => {
     setError(null);
-    setGraphData(null);
     setSelectedKey(null);
 
-    try {
-      let filePaths = [];
-
-      if (resolvedTarget === "__all__") {
-        if (!workingDir) { setError("No project folder open"); setAnalyzing(false); return; }
-        filePaths = await collectJSFiles(workingDir);
-        if (filePaths.length === 0) { setError("No JS/TS files found in project"); setAnalyzing(false); return; }
-      } else if (resolvedTarget) {
-        filePaths = [resolvedTarget];
-      } else {
-        setError("No file selected"); setAnalyzing(false); return;
-      }
-
-      const allFunctions = [];
-      for (const fp of filePaths) {
-        try {
-          const { content } = await window.akatsuki.shinra.readFile(fp);
-          if (content) {
-            const fns = parseFile(content, fp);
-            allFunctions.push(...fns);
-          }
-        } catch {}
-      }
-
-      if (allFunctions.length === 0) {
-        setError("No functions found in the analyzed file(s)");
-        setAnalyzing(false);
-        return;
-      }
-
-      const graph = buildCallGraph(allFunctions);
-      setGraphData(graph);
-
-      // Auto-select first function
-      const keys = Array.from(graph.keys());
-      if (keys.length > 0) setSelectedKey(keys[0]);
-    } catch (err) {
-      setError(`Analysis failed: ${err.message}`);
+    if (!sharedFunctionMap || sharedFunctionMap.size === 0) {
+      setError("Index not ready — waiting for project scan");
+      return;
     }
 
-    setAnalyzing(false);
-  }, [resolvedTarget, workingDir]);
+    let filtered;
+    if (resolvedTarget === "__all__") {
+      filtered = sharedFunctionMap;
+    } else if (resolvedTarget) {
+      filtered = new Map();
+      for (const [key, fn] of sharedFunctionMap) {
+        if (fn.file === resolvedTarget) filtered.set(key, fn);
+      }
+    } else {
+      setError("No file selected");
+      return;
+    }
+
+    if (filtered.size === 0) {
+      setError("No functions found for the selected scope");
+      return;
+    }
+
+    setGraphData(filtered);
+    const keys = Array.from(filtered.keys());
+    if (keys.length > 0) setSelectedKey(keys[0]);
+  }, [resolvedTarget, sharedFunctionMap]);
+
+  // Auto-analyze when index becomes ready or target changes
+  useEffect(() => {
+    if (indexStatus === "ready" && sharedFunctionMap && sharedFunctionMap.size > 0) {
+      handleAnalyze();
+    }
+  }, [indexStatus, sharedFunctionMap, resolvedTarget]);
 
   // ── Selected function data ──────────────────────────────────────────────
   const selectedFn = useMemo(() => {
@@ -684,9 +438,14 @@ function ScreenCallGraph() {
   // ── Go to definition ──────────────────────────────────────────────────
   const handleGoToDefinition = useCallback(() => {
     if (selectedFn && selectedFn.file) {
+      setOpenFiles((prev) => {
+        if (prev.includes(selectedFn.file)) return prev;
+        return [...prev, selectedFn.file];
+      });
       setActiveFile(selectedFn.file);
+      setActiveTab("editor");
     }
-  }, [selectedFn, setActiveFile]);
+  }, [selectedFn, setActiveFile, setOpenFiles, setActiveTab]);
 
   // ── No workingDir state ───────────────────────────────────────────────
   if (!workingDir) {
