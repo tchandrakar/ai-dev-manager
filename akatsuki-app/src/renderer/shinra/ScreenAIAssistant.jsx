@@ -20,8 +20,9 @@ const ACTION_PROMPTS = {
 };
 
 // ── CodeBlock sub-component ─────────────────────────────────────────────────
-function CodeBlock({ code, language }) {
+function CodeBlock({ code, language, onApply }) {
   const [copied, setCopied] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(code).then(() => {
@@ -29,6 +30,14 @@ function CodeBlock({ code, language }) {
       setTimeout(() => setCopied(false), 1500);
     });
   }, [code]);
+
+  const handleApply = useCallback(() => {
+    if (onApply) {
+      onApply(code);
+      setApplied(true);
+      setTimeout(() => setApplied(false), 2000);
+    }
+  }, [code, onApply]);
 
   const lines = code.split("\n");
 
@@ -53,8 +62,17 @@ function CodeBlock({ code, language }) {
           {language || "code"}
         </span>
         <div style={{ display: "flex", gap: 4 }}>
+          {onApply && (
+            <Btn variant="subtle" onClick={handleApply} style={{
+              height: 22, fontSize: 10, padding: "0 8px",
+              background: applied ? `${T.green}20` : undefined,
+              color: applied ? T.green : undefined,
+            }}>
+              {applied ? "✓ Applied" : "Apply"}
+            </Btn>
+          )}
           <Btn variant="subtle" onClick={handleCopy} style={{ height: 22, fontSize: 10, padding: "0 8px" }}>
-            {copied ? "Copied!" : "Apply"}
+            {copied ? "Copied!" : "Copy"}
           </Btn>
         </div>
       </div>
@@ -97,7 +115,7 @@ function CodeBlock({ code, language }) {
 }
 
 // ── Render markdown-like assistant text ─────────────────────────────────────
-function renderMessageContent(text) {
+function renderMessageContent(text, onApplyCode) {
   const parts = [];
   let remaining = text;
   let idx = 0;
@@ -105,17 +123,14 @@ function renderMessageContent(text) {
   while (remaining.length > 0) {
     const codeStart = remaining.indexOf("```");
     if (codeStart === -1) {
-      // No more code blocks — render rest as text
       parts.push(<TextBlock key={idx++} text={remaining} />);
       break;
     }
 
-    // Text before code block
     if (codeStart > 0) {
       parts.push(<TextBlock key={idx++} text={remaining.slice(0, codeStart)} />);
     }
 
-    // Find end of code block
     const afterLang = remaining.indexOf("\n", codeStart);
     if (afterLang === -1) {
       parts.push(<TextBlock key={idx++} text={remaining} />);
@@ -125,14 +140,13 @@ function renderMessageContent(text) {
     const lang = remaining.slice(codeStart + 3, afterLang).trim();
     const codeEnd = remaining.indexOf("```", afterLang + 1);
     if (codeEnd === -1) {
-      // Unclosed code block — render the rest as code
       const code = remaining.slice(afterLang + 1);
-      parts.push(<CodeBlock key={idx++} code={code} language={lang} />);
+      parts.push(<CodeBlock key={idx++} code={code} language={lang} onApply={onApplyCode} />);
       break;
     }
 
     const code = remaining.slice(afterLang + 1, codeEnd);
-    parts.push(<CodeBlock key={idx++} code={code} language={lang} />);
+    parts.push(<CodeBlock key={idx++} code={code} language={lang} onApply={onApplyCode} />);
     remaining = remaining.slice(codeEnd + 3);
   }
 
@@ -237,7 +251,7 @@ function renderInlineFormatting(text) {
 }
 
 // ── ChatMessage sub-component ───────────────────────────────────────────────
-function ChatMessage({ message, onCopy }) {
+function ChatMessage({ message, onCopy, onApplyCode }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
 
@@ -313,7 +327,7 @@ function ChatMessage({ message, onCopy }) {
         {isUser ? (
           <span style={{ whiteSpace: "pre-wrap" }}>{message.content}</span>
         ) : (
-          renderMessageContent(message.content)
+          renderMessageContent(message.content, onApplyCode)
         )}
       </div>
     </div>
@@ -407,7 +421,7 @@ function ModelOption({ agent, selected, onClick }) {
 
 // ── ScreenAIAssistant (default export) ──────────────────────────────────────
 function ScreenAIAssistant() {
-  const { activeFile, openFiles, workingDir, aiHistory, setAiHistory } = useShinra();
+  const { activeFile, openFiles, workingDir, aiHistory, setAiHistory, setActiveFile, setOpenFiles, setActiveTab } = useShinra();
 
   // State
   const [activeAction, setActiveAction] = useState("chat");
@@ -422,6 +436,18 @@ function ScreenAIAssistant() {
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // Apply code from AI suggestion to the active file
+  const handleApplyCode = useCallback(async (code) => {
+    if (!activeFile) return;
+    try {
+      await window.akatsuki.shinra.writeFile(activeFile, code);
+      // Re-open file to refresh editor content
+      setOpenFiles((prev) => prev.includes(activeFile) ? prev : [...prev, activeFile]);
+      setActiveFile(activeFile);
+      setActiveTab("editor");
+    } catch {}
+  }, [activeFile, setOpenFiles, setActiveFile, setActiveTab]);
 
   // Load AI agents from config
   useEffect(() => {
@@ -930,7 +956,7 @@ function ScreenAIAssistant() {
           ) : (
             <>
               {aiHistory.map((msg, i) => (
-                <ChatMessage key={`${msg.ts || i}-${i}`} message={msg} />
+                <ChatMessage key={`${msg.ts || i}-${i}`} message={msg} onApplyCode={handleApplyCode} />
               ))}
               {sending && (
                 <div style={{
