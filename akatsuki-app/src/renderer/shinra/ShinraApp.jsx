@@ -702,10 +702,19 @@ function ShinraApp({ initialTab, onNavigate }) {
   // Status bar text
   const statusText = useMemo(() => {
     switch (activeTab) {
-      case "editor":
-        return activeFile
-          ? `${activeFile} | TypeScript | UTF-8 | LF`
-          : workingDir ? `${workingDir}` : "No folder open";
+      case "editor": {
+        if (!activeFile) return workingDir ? `${workingDir}` : "No folder open";
+        const ext = activeFile.includes(".") ? activeFile.split(".").pop().toLowerCase() : "";
+        const langMap = {
+          ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript", jsx: "JavaScript React",
+          py: "Python", go: "Go", rs: "Rust", json: "JSON", md: "Markdown",
+          css: "CSS", scss: "SCSS", html: "HTML", xml: "XML", svg: "SVG",
+          yml: "YAML", yaml: "YAML", toml: "TOML", sh: "Shell Script", bash: "Bash",
+          env: "Environment", gitignore: "Git Ignore", lock: "Lock File",
+        };
+        const lang = langMap[ext] || "Plain Text";
+        return `${activeFile} | ${lang} | UTF-8 | LF`;
+      }
       case "debugger":
         return debugSession ? `Debug Mode | ${debugSession.name}` : "No debug session";
       case "ai":

@@ -186,8 +186,12 @@ function LeftNav({ screen, onNavigate, prData, historyCount, connections, collap
             {/* Sharingan parent row */}
             <div
               onClick={() => {
-                onNavigate("review");
-                setSharinganOpen(o => !o);
+                if (isSharing) {
+                  setSharinganOpen(o => !o);
+                } else {
+                  onNavigate("review");
+                  setSharinganOpen(true);
+                }
               }}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -238,8 +242,12 @@ function LeftNav({ screen, onNavigate, prData, historyCount, connections, collap
             {/* KawaiiDB parent row */}
             <div
               onClick={() => {
-                onNavigate("kawaiidb:connections");
-                setKawaiiOpen(o => !o);
+                if (isKawaii) {
+                  setKawaiiOpen(o => !o);
+                } else {
+                  onNavigate("kawaiidb:connections");
+                  setKawaiiOpen(true);
+                }
               }}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -288,8 +296,12 @@ function LeftNav({ screen, onNavigate, prData, historyCount, connections, collap
 
             <div
               onClick={() => {
-                onNavigate("shinra:editor");
-                setShinraOpen(o => !o);
+                if (isShinra) {
+                  setShinraOpen(o => !o);
+                } else {
+                  onNavigate("shinra:editor");
+                  setShinraOpen(true);
+                }
               }}
               style={{
                 display: "flex", alignItems: "center", gap: 10,

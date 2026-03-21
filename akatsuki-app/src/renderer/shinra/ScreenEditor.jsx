@@ -390,6 +390,13 @@ function ScreenEditor() {
   const [scrollTop, setScrollTop] = useState(0);
   const [editorHeight, setEditorHeight] = useState(400);
 
+  // Find in file
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findMatches, setFindMatches] = useState(0);
+  const [findCurrent, setFindCurrent] = useState(0);
+  const findInputRef = useRef(null);
+
   // ── Load tree when workingDir changes ─────────────────────────────────────
   useEffect(() => {
     if (!workingDir) {
@@ -591,6 +598,14 @@ function ScreenEditor() {
           e.preventDefault();
           setActiveFile(openFiles[idx]);
         }
+        return;
+      }
+
+      // ⌘F — find in file
+      if (mod && e.key === "f" && !e.shiftKey) {
+        e.preventDefault();
+        setFindOpen((p) => !p);
+        setTimeout(() => findInputRef.current?.focus(), 50);
         return;
       }
 
@@ -974,12 +989,55 @@ function ScreenEditor() {
                   )}
                 </div>
 
+                {/* Find bar */}
+                {findOpen && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "4px 12px", background: T.bg1,
+                    borderBottom: `1px solid ${T.border}`, height: 32, flexShrink: 0,
+                  }}>
+                    <input
+                      ref={findInputRef}
+                      value={findQuery}
+                      onChange={(e) => {
+                        const q = e.target.value;
+                        setFindQuery(q);
+                        if (q.length > 0) {
+                          const count = (activeContent.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")) || []).length;
+                          setFindMatches(count);
+                          setFindCurrent(count > 0 ? 1 : 0);
+                        } else {
+                          setFindMatches(0);
+                          setFindCurrent(0);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") { setFindOpen(false); setFindQuery(""); }
+                        if (e.key === "Enter") setFindCurrent((p) => p < findMatches ? p + 1 : 1);
+                      }}
+                      placeholder="Find..."
+                      style={{
+                        flex: 1, maxWidth: 280, background: T.bg3, border: `1px solid ${T.border2}`,
+                        borderRadius: 4, padding: "3px 8px", color: T.txt, fontSize: 12,
+                        fontFamily: T.fontUI, outline: "none",
+                      }}
+                    />
+                    <span style={{ fontSize: 10, color: T.txt3, fontFamily: T.fontMono, minWidth: 50 }}>
+                      {findQuery ? `${findCurrent}/${findMatches}` : ""}
+                    </span>
+                    <span
+                      onClick={() => { setFindOpen(false); setFindQuery(""); }}
+                      style={{ color: T.txt3, cursor: "pointer", fontSize: 13 }}
+                    >×</span>
+                  </div>
+                )}
+
                 {/* Scrollable code area with overlaid textarea */}
                 <div
                   ref={editorRef}
                   style={{
                     position: "absolute",
-                    top: 26,
+                    top: findOpen ? 58 : 26,
                     left: 0,
                     right: 0,
                     bottom: 0,
@@ -1030,7 +1088,8 @@ function ScreenEditor() {
                       tabSize: 2,
                       whiteSpace: "pre",
                       resize: "none",
-                      overflow: "hidden",
+                      overflowX: "auto",
+                      overflowY: "hidden",
                       zIndex: 2,
                       letterSpacing: "normal",
                       wordSpacing: "normal",
