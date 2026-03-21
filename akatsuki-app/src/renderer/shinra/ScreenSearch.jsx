@@ -331,7 +331,7 @@ function ScreenSearch() {
   }, [searchOpen, setSearchOpen]);
 
   // Flat results list for arrow-key navigation
-  const flatResults = useMemo(() => results, [results]);
+  const flatResults = results;
 
   // Sync selectedItem with selectedIdx
   useEffect(() => {

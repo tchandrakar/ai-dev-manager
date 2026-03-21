@@ -543,21 +543,21 @@ function ScreenAIAssistant() {
 
   // Handle action tab click — keep active tab, show spinner inline
   const handleActionClick = useCallback((key) => {
-    setActiveAction(key);
-    if (key !== "chat") {
-      if (!activeFile || !fileContent) {
-        setAiHistory(prev => [
-          ...prev,
-          { role: "assistant", content: "No file is currently open. Please open a file first to use this action.", ts: Date.now() },
-        ]);
-        setActiveAction("chat");
-        return;
-      }
-      const prompt = ACTION_PROMPTS[key];
-      // Send and only switch to chat tab AFTER response arrives
-      sendMessage(prompt).finally(() => setActiveAction("chat"));
+    if (key === "chat") {
+      setActiveAction("chat");
+      return;
     }
-  }, [activeFile, fileContent, sendMessage, setAiHistory]);
+    if (!activeFile || !fileContent) {
+      setAiHistory(prev => [
+        ...prev,
+        { role: "assistant", content: "No file is currently open. Please open a file first to use this action.", ts: Date.now() },
+      ]);
+      return;
+    }
+    setActiveAction(key);
+    const prompt = ACTION_PROMPTS[key];
+    sendMessage(prompt).finally(() => setActiveAction("chat"));
+  }, [activeFile, fileContent, sendMessage, setAiHistory, setActiveAction]);
 
   // Handle chat submit
   const handleSubmit = useCallback((e) => {

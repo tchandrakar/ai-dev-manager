@@ -84,7 +84,60 @@
               {table:"users",type:"ref",rows:"~1",key:"PRIMARY",extra:"Using index"},
             ]}), 300)),
           },
-          shinra:  { readDir: () => Promise.resolve({ entries: [] }), readFile: () => Promise.resolve({ content: "", size: 0 }), writeFile: () => Promise.resolve({ ok: true }), fileStat: () => Promise.resolve({ size: 0, isDir: false, isFile: true }), searchFiles: () => Promise.resolve({ results: [] }), runCommand: () => Promise.resolve({ stdout: "", stderr: "", exitCode: 0 }), selectFolder: () => Promise.resolve({ canceled: true }), shellCreate: () => Promise.resolve({ ok: true, pid: 0, shell: "/bin/zsh" }), shellWrite: () => Promise.resolve({ ok: true }), shellDestroy: () => Promise.resolve({ ok: true }), onShellStdout: () => {}, onShellStderr: () => {}, onShellExit: () => {}, removeShellListeners: () => {} },
+          shinra: (() => {
+            const _mockTree = {
+              "/mock-project": [
+                { name: "src", isDir: true, path: "/mock-project/src" },
+                { name: "docs", isDir: true, path: "/mock-project/docs" },
+                { name: "package.json", isDir: false, path: "/mock-project/package.json" },
+                { name: "tsconfig.json", isDir: false, path: "/mock-project/tsconfig.json" },
+                { name: "README.md", isDir: false, path: "/mock-project/README.md" },
+              ],
+              "/mock-project/src": [
+                { name: "components", isDir: true, path: "/mock-project/src/components" },
+                { name: "utils", isDir: true, path: "/mock-project/src/utils" },
+                { name: "index.ts", isDir: false, path: "/mock-project/src/index.ts" },
+                { name: "app.tsx", isDir: false, path: "/mock-project/src/app.tsx" },
+              ],
+              "/mock-project/src/components": [
+                { name: "Button.tsx", isDir: false, path: "/mock-project/src/components/Button.tsx" },
+                { name: "Header.tsx", isDir: false, path: "/mock-project/src/components/Header.tsx" },
+                { name: "Modal.tsx", isDir: false, path: "/mock-project/src/components/Modal.tsx" },
+              ],
+              "/mock-project/src/utils": [
+                { name: "api.ts", isDir: false, path: "/mock-project/src/utils/api.ts" },
+                { name: "helpers.ts", isDir: false, path: "/mock-project/src/utils/helpers.ts" },
+              ],
+              "/mock-project/docs": [
+                { name: "getting-started.md", isDir: false, path: "/mock-project/docs/getting-started.md" },
+              ],
+            };
+            const _mockFiles = {
+              "/mock-project/src/index.ts": 'import { createApp } from "./app";\nimport { setupLogger } from "./utils/helpers";\n\nconst logger = setupLogger("main");\n\nasync function bootstrap() {\n  logger.info("Starting application...");\n  const app = await createApp({ port: 3000 });\n  await app.listen();\n  logger.info(`Server running on port ${app.port}`);\n}\n\nbootstrap().catch((err) => {\n  logger.error("Fatal error:", err);\n  process.exit(1);\n});\n',
+              "/mock-project/src/app.tsx": 'import React from "react";\nimport { Header } from "./components/Header";\nimport { Button } from "./components/Button";\n\ninterface AppProps {\n  title?: string;\n  theme?: "light" | "dark";\n}\n\nexport function App({ title = "My App", theme = "dark" }: AppProps) {\n  const [count, setCount] = React.useState(0);\n\n  return (\n    <div className={`app app--${theme}`}>\n      <Header title={title} />\n      <main>\n        <p>Count: {count}</p>\n        <Button onClick={() => setCount(c => c + 1)}>Increment</Button>\n      </main>\n    </div>\n  );\n}\n',
+              "/mock-project/src/components/Button.tsx": 'import React from "react";\n\ninterface ButtonProps {\n  children: React.ReactNode;\n  onClick?: () => void;\n  variant?: "primary" | "secondary" | "danger";\n  disabled?: boolean;\n}\n\nexport function Button({ children, onClick, variant = "primary", disabled }: ButtonProps) {\n  return (\n    <button\n      className={`btn btn--${variant}`}\n      onClick={onClick}\n      disabled={disabled}\n    >\n      {children}\n    </button>\n  );\n}\n',
+              "/mock-project/src/utils/api.ts": 'const BASE_URL = process.env.API_URL || "http://localhost:4000";\n\nexport async function fetchJSON<T>(path: string, opts?: RequestInit): Promise<T> {\n  const res = await fetch(`${BASE_URL}${path}`, {\n    headers: { "Content-Type": "application/json" },\n    ...opts,\n  });\n  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);\n  return res.json();\n}\n\nexport const api = {\n  getUsers: () => fetchJSON("/api/users"),\n  getUser: (id: string) => fetchJSON(`/api/users/${id}`),\n  createUser: (data: unknown) => fetchJSON("/api/users", { method: "POST", body: JSON.stringify(data) }),\n};\n',
+              "/mock-project/package.json": '{\n  "name": "mock-project",\n  "version": "1.0.0",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "test": "vitest"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  }\n}\n',
+            };
+            const _defaultContent = 'export default function Component() {\n  return <div>Hello World</div>;\n}\n';
+            let _shellCbs = { stdout: null, stderr: null, exit: null };
+            return {
+              readDir: (dir) => Promise.resolve({ entries: _mockTree[dir] || [] }),
+              readFile: (fp) => { const c = _mockFiles[fp] || _defaultContent; return Promise.resolve({ content: c, size: c.length, mtime: Date.now() }); },
+              writeFile: () => Promise.resolve({ ok: true }),
+              fileStat: (fp) => Promise.resolve({ size: (_mockFiles[fp] || "").length, isDir: false, isFile: true }),
+              searchFiles: (opts) => { const q = (opts.query || "").toLowerCase(); const hits = Object.keys(_mockFiles).filter(f => f.toLowerCase().includes(q)).map(f => ({ file: f, line: 1, text: f.split("/").pop() })); return Promise.resolve({ results: hits.slice(0, 20) }); },
+              runCommand: (opts) => new Promise(r => setTimeout(() => r({ stdout: `$ ${opts.cmd}\n[mock output]\n`, stderr: "", exitCode: 0 }), 300)),
+              selectFolder: () => Promise.resolve({ canceled: false, path: "/mock-project" }),
+              shellCreate: (opts) => { setTimeout(() => { if (_shellCbs.stdout) _shellCbs.stdout(`Welcome to mock shell\n${opts?.cwd || "/mock-project"} $ `); }, 200); return Promise.resolve({ ok: true, pid: 9999, shell: "/bin/zsh" }); },
+              shellWrite: (data) => { setTimeout(() => { if (_shellCbs.stdout) _shellCbs.stdout(`[mock] ${data}`); }, 150); return Promise.resolve({ ok: true }); },
+              shellDestroy: () => { _shellCbs = { stdout: null, stderr: null, exit: null }; return Promise.resolve({ ok: true }); },
+              onShellStdout: (cb) => { _shellCbs.stdout = cb; },
+              onShellStderr: (cb) => { _shellCbs.stderr = cb; },
+              onShellExit: (cb) => { _shellCbs.exit = cb; },
+              removeShellListeners: () => { _shellCbs = { stdout: null, stderr: null, exit: null }; },
+            };
+          })(),
         };
       }
     </script>

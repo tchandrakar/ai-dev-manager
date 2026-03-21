@@ -458,6 +458,39 @@ function ScreenEditor() {
     }
   }, [fileContents, setOpenFiles, setActiveFile]);
 
+  // ── Auto-load content when activeFile changes (e.g. opened from Search) ──
+  useEffect(() => {
+    if (!activeFile || fileContents[activeFile]) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await window.akatsuki.shinra.readFile(activeFile);
+        if (cancelled) return;
+        setFileContents((prev) => ({
+          ...prev,
+          [activeFile]: {
+            content: res.content || "",
+            original: res.content || "",
+            size: res.size,
+            modified: false,
+          },
+        }));
+      } catch {
+        if (cancelled) return;
+        setFileContents((prev) => ({
+          ...prev,
+          [activeFile]: {
+            content: "// Error reading file",
+            original: "",
+            size: 0,
+            modified: false,
+          },
+        }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeFile, fileContents]);
+
   // ── Close tab ─────────────────────────────────────────────────────────────
   const handleCloseTab = useCallback((filePath) => {
     setOpenFiles((prev) => {
@@ -663,7 +696,7 @@ function ScreenEditor() {
   }, [termOutput, aiSuggestion]);
 
   // Terminal submit — send to persistent shell
-  const handleTermSubmit = useCallback((e) => {
+  const handleTermSubmit = useCallback(async (e) => {
     e.preventDefault();
     const cmd = termInput.trim();
     if (!cmd || !shellActive) return;
@@ -679,7 +712,11 @@ function ScreenEditor() {
     });
 
     // Write to shell stdin
-    window.akatsuki.shinra.shellWrite(cmd + "\n");
+    try {
+      await window.akatsuki.shinra.shellWrite(cmd + "\n");
+    } catch {
+      setTermOutput(prev => prev + `[Error sending command]\n`);
+    }
   }, [termInput, shellActive]);
 
   // Up/Down arrow for command history
