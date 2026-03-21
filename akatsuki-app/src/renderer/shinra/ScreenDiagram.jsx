@@ -332,6 +332,52 @@ function ImportListItem({ fileId, workingDir, onClick }) {
   );
 }
 
+function HealthGauge({ score }) {
+  const r = 36;
+  const stroke = 6;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score)) / 100;
+  const dashOffset = circ * (1 - pct);
+  const color = score >= 70 ? "#3FB950" : score >= 40 ? "#F5A623" : "#F85149";
+  const size = (r + stroke) * 2;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 8 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Background ring */}
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none" stroke={T.bg3} strokeWidth={stroke}
+        />
+        {/* Score arc */}
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none" stroke={color} strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={dashOffset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: "stroke-dashoffset 0.4s ease" }}
+        />
+        {/* Score text */}
+        <text
+          x={size / 2} y={size / 2 - 2}
+          textAnchor="middle" dominantBaseline="central"
+          fill={color} fontSize={18} fontWeight={700} fontFamily={T.fontMono}
+        >
+          {score}
+        </text>
+        <text
+          x={size / 2} y={size / 2 + 14}
+          textAnchor="middle" dominantBaseline="central"
+          fill={T.txt3} fontSize={9} fontFamily={T.fontUI}
+        >
+          / 100
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function ScreenDiagram() {
@@ -401,6 +447,7 @@ export default function ScreenDiagram() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [positions, setPositions] = useState([]); // [{id, x, y}]
+  const [orphansExpanded, setOrphansExpanded] = useState(false);
 
   // Pan / zoom
   const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -409,13 +456,21 @@ export default function ScreenDiagram() {
   const dragNodeId = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const svgRef = useRef(null);
+  const prevGraphLen = useRef(0);
 
   // Auto-layout when graph changes
   useEffect(() => {
     if (graph && graph.nodes.length > 0) {
       const laid = layoutNodes(graph.nodes, graph.edges);
       setPositions(laid);
-      setViewTransform({ x: 0, y: 0, scale: 1 });
+      // Only reset pan/zoom on initial load or when the graph size changes significantly
+      const prevLen = prevGraphLen.current;
+      const curLen = graph.nodes.length;
+      const isBigChange = prevLen === 0 || Math.abs(curLen - prevLen) > prevLen * 0.3;
+      if (isBigChange) {
+        setViewTransform({ x: 0, y: 0, scale: 1 });
+      }
+      prevGraphLen.current = curLen;
     }
   }, [graph]);
 
@@ -548,12 +603,12 @@ export default function ScreenDiagram() {
     dragNodeId.current = nodeId;
     const svgEl = svgRef.current;
     if (!svgEl) return;
-    const rect = svgEl.getBoundingClientRect();
-    const mx = (e.clientX - rect.left - viewTransform.x) / viewTransform.scale;
-    const my = (e.clientY - rect.top - viewTransform.y) / viewTransform.scale;
+    const svgRect = svgEl.getBoundingClientRect();
+    const mouseX = (e.clientX - svgRect.left) / viewTransform.scale - viewTransform.x / viewTransform.scale;
+    const mouseY = (e.clientY - svgRect.top) / viewTransform.scale - viewTransform.y / viewTransform.scale;
     const pos = positions.find(p => p.id === nodeId);
     if (pos) {
-      dragOffset.current = { x: mx - pos.x, y: my - pos.y };
+      dragOffset.current = { x: mouseX - pos.x, y: mouseY - pos.y };
     }
   }, [viewTransform, positions]);
 
@@ -937,6 +992,15 @@ export default function ScreenDiagram() {
                   <div style={{ fontSize: 9, color: T.txt3 }}>Imported By</div>
                 </div>
               </div>
+
+              {/* Open in Editor */}
+              <Btn
+                variant="ghost"
+                onClick={() => handleOpenInEditor(selectedNode)}
+                style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 10 }}
+              >
+                Open in Editor
+              </Btn>
             </div>
 
             {/* Imports list */}
@@ -997,7 +1061,7 @@ export default function ScreenDiagram() {
         {graph && (
           <div style={{
             borderTop: `1px solid ${T.border}`, padding: "10px 12px",
-            flexShrink: 0,
+            flexShrink: 0, overflow: "hidden auto",
           }}>
             <div style={{
               fontSize: 10, fontWeight: 700, color: T.txt2,
@@ -1006,6 +1070,9 @@ export default function ScreenDiagram() {
             }}>
               Health
             </div>
+
+            {/* Health score gauge */}
+            <HealthGauge score={Math.max(0, 100 - cycles.length * 15 - orphanNodes.length * 5)} />
 
             {/* Circular deps */}
             <div style={{
@@ -1027,10 +1094,13 @@ export default function ScreenDiagram() {
               </span>
             </div>
 
-            {/* Orphan files */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-            }}>
+            {/* Orphan files — collapsible */}
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: orphanNodes.length > 0 ? "pointer" : "default",
+              }}
+              onClick={() => { if (orphanNodes.length > 0) setOrphansExpanded(prev => !prev); }}
+            >
               <div style={{
                 width: 8, height: 8, borderRadius: "50%",
                 background: orphanNodes.length > 0 ? T.amber : T.green,
@@ -1038,14 +1108,49 @@ export default function ScreenDiagram() {
               }} />
               <span style={{
                 fontSize: 11, color: orphanNodes.length > 0 ? T.amber : T.green,
-                fontWeight: 600,
+                fontWeight: 600, flex: 1,
               }}>
                 {orphanNodes.length > 0
                   ? `${orphanNodes.length} orphan file${orphanNodes.length !== 1 ? "s" : ""}`
                   : "No orphan files"
                 }
               </span>
+              {orphanNodes.length > 0 && (
+                <span style={{
+                  fontSize: 10, color: T.txt3,
+                  transform: orphansExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                  transition: "transform 0.15s",
+                  display: "inline-block",
+                }}>
+                  &#x25B6;
+                </span>
+              )}
             </div>
+
+            {/* Expanded orphan file list */}
+            {orphansExpanded && orphanNodes.length > 0 && (
+              <div style={{
+                marginTop: 6, marginLeft: 16,
+                borderLeft: `2px solid ${T.amber}30`,
+                paddingLeft: 8,
+                maxHeight: 120, overflowY: "auto",
+              }}>
+                {orphanNodes.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => setSelectedNode(n.id)}
+                    style={{
+                      fontSize: 10, color: T.txt2, fontFamily: T.fontMono,
+                      padding: "2px 0", cursor: "pointer",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}
+                    title={shortName(n.id, workingDir)}
+                  >
+                    {n.name}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
