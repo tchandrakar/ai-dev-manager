@@ -50,6 +50,61 @@ function ParamRow({ param, index }) {
   );
 }
 
+function FunctionSignature({ fn }) {
+  // Heuristic: PascalCase names → function declaration; camelCase → arrow/const
+  const isArrow = !fn.name.match(/^[A-Z]/);
+
+  return (
+    <div style={{
+      background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 6,
+      padding: "8px 12px", fontFamily: T.fontMono, fontSize: 12,
+      lineHeight: 1.6, overflowX: "auto", whiteSpace: "nowrap",
+    }}>
+      {fn.isExported && (
+        <span style={{ color: T.purple }}>export </span>
+      )}
+      {isArrow ? (
+        <>
+          <span style={{ color: T.purple }}>const </span>
+          <span style={{ color: T.blue }}>{fn.name}</span>
+          <span style={{ color: T.txt2 }}> = </span>
+          {fn.isAsync && <span style={{ color: T.purple }}>async </span>}
+          <span style={{ color: T.txt2 }}>(</span>
+          {fn.params.map((p, i) => (
+            <React.Fragment key={p.name + i}>
+              {i > 0 && <span style={{ color: T.txt2 }}>, </span>}
+              <span style={{ color: T.cyan }}>{p.name}</span>
+              <span style={{ color: T.txt2 }}>: </span>
+              <span style={{ color: T.green }}>{p.type}</span>
+            </React.Fragment>
+          ))}
+          <span style={{ color: T.txt2 }}>)</span>
+          <span style={{ color: T.txt2 }}>: </span>
+          <span style={{ color: T.amber }}>{fn.returnType}</span>
+        </>
+      ) : (
+        <>
+          {fn.isAsync && <span style={{ color: T.purple }}>async </span>}
+          <span style={{ color: T.purple }}>function </span>
+          <span style={{ color: T.blue }}>{fn.name}</span>
+          <span style={{ color: T.txt2 }}>(</span>
+          {fn.params.map((p, i) => (
+            <React.Fragment key={p.name + i}>
+              {i > 0 && <span style={{ color: T.txt2 }}>, </span>}
+              <span style={{ color: T.cyan }}>{p.name}</span>
+              <span style={{ color: T.txt2 }}>: </span>
+              <span style={{ color: T.green }}>{p.type}</span>
+            </React.Fragment>
+          ))}
+          <span style={{ color: T.txt2 }}>)</span>
+          <span style={{ color: T.txt2 }}>: </span>
+          <span style={{ color: T.amber }}>{fn.returnType}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CallerItem({ fnData, isSelected, onClick }) {
   const [hov, setHov] = useState(false);
   const color = TYPE_COLORS[fnData.type] || T.green;
@@ -118,10 +173,13 @@ function CalleeItem({ fnData, isSelected, onClick }) {
   );
 }
 
-function CallNode({ x, y, label, type, isCenter, onClick, onHover }) {
+function CallNode({ x, y, label, type, isCenter, onClick, onHover, file }) {
   const [hov, setHov] = useState(false);
   const color = TYPE_COLORS[type] || T.green;
   const r = isCenter ? CENTER_RADIUS : NODE_RADIUS;
+  const maxChars = isCenter ? 15 : 12;
+  const truncated = label.length > maxChars ? label.slice(0, maxChars - 1) + "\u2026" : label;
+  const tooltipText = file ? `${label} \u2014 ${file.split("/").pop()}` : label;
 
   return (
     <g
@@ -130,6 +188,7 @@ function CallNode({ x, y, label, type, isCenter, onClick, onHover }) {
       onMouseLeave={() => { setHov(false); if (onHover) onHover(false); }}
       style={{ cursor: "pointer" }}
     >
+      <title>{tooltipText}</title>
       {/* Glow behind node */}
       <circle
         cx={x} cy={y} r={r + 6}
@@ -158,7 +217,7 @@ function CallNode({ x, y, label, type, isCenter, onClick, onHover }) {
         fill={T.txt} fontSize={isCenter ? 11 : 10}
         fontFamily={T.fontMono} fontWeight={isCenter ? 700 : 500}
       >
-        {label.length > (isCenter ? 14 : 10) ? label.slice(0, isCenter ? 13 : 9) + "\u2026" : label}
+        {truncated}
       </text>
       {/* Type label below */}
       <text
@@ -173,6 +232,8 @@ function CallNode({ x, y, label, type, isCenter, onClick, onHover }) {
 }
 
 function CallEdge({ x1, y1, x2, y2, color, direction }) {
+  const [hov, setHov] = useState(false);
+
   // Curved path from source to target
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -187,10 +248,10 @@ function CallEdge({ x1, y1, x2, y2, color, direction }) {
   const ex = x2 - (dx / dist) * r2;
   const ey = y2 - (dy / dist) * r2;
 
-  // Control point for curve
+  // Control point for curve — increased curvature
   const midX = (sx + ex) / 2;
   const midY = (sy + ey) / 2;
-  const curvature = Math.min(40, dist * 0.15);
+  const curvature = Math.min(60, dist * 0.25);
   const perpX = -(ey - sy) / dist * curvature;
   const perpY = (ex - sx) / dist * curvature;
   const cx = midX + perpX;
@@ -204,22 +265,39 @@ function CallEdge({ x1, y1, x2, y2, color, direction }) {
   const tangentY = 2 * (1 - arrowT) * (cy - sy) + 2 * arrowT * (ey - cy);
   const angle = Math.atan2(tangentY, tangentX);
 
-  const arrowSize = 6;
-  const a1x = ax - arrowSize * Math.cos(angle - 0.4);
-  const a1y = ay - arrowSize * Math.sin(angle - 0.4);
-  const a2x = ax - arrowSize * Math.cos(angle + 0.4);
-  const a2y = ay - arrowSize * Math.sin(angle + 0.4);
+  const arrowSize = 9;
+  const a1x = ax - arrowSize * Math.cos(angle - 0.35);
+  const a1y = ay - arrowSize * Math.sin(angle - 0.35);
+  const a2x = ax - arrowSize * Math.cos(angle + 0.35);
+  const a2y = ay - arrowSize * Math.sin(angle + 0.35);
+
+  const strokeOpacity = hov ? "90" : "50";
+  const strokeW = hov ? 2.5 : 1.5;
 
   return (
-    <g>
+    <g
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{ cursor: "default" }}
+    >
+      {/* Hover glow shadow */}
+      {hov && (
+        <path
+          d={`M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`}
+          fill="none" stroke={color} strokeWidth={6}
+          opacity={0.15} strokeLinecap="round"
+        />
+      )}
       <path
         d={`M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`}
-        fill="none" stroke={`${color}50`} strokeWidth={1.5}
+        fill="none" stroke={`${color}${strokeOpacity}`} strokeWidth={strokeW}
         strokeDasharray="4 3"
+        style={{ transition: "stroke-width 0.15s, stroke 0.15s" }}
       />
       <polygon
         points={`${ex},${ey} ${a1x},${a1y} ${a2x},${a2y}`}
-        fill={`${color}80`}
+        fill={hov ? color : `${color}80`}
+        style={{ transition: "fill 0.15s" }}
       />
     </g>
   );
@@ -711,6 +789,7 @@ function ScreenCallGraph() {
                     x={node.x} y={node.y}
                     label={node.fn.name}
                     type={node.fn.type}
+                    file={node.fn.file}
                     isCenter={false}
                     onClick={() => handleNodeClick(node.key)}
                   />
@@ -723,6 +802,7 @@ function ScreenCallGraph() {
                     x={node.x} y={node.y}
                     label={node.fn.name}
                     type={node.fn.type}
+                    file={node.fn.file}
                     isCenter={false}
                     onClick={() => handleNodeClick(node.key)}
                   />
@@ -733,6 +813,7 @@ function ScreenCallGraph() {
                   x={svgLayout.centerX} y={svgLayout.centerY}
                   label={selectedFn.name}
                   type={selectedFn.type}
+                  file={selectedFn.file}
                   isCenter={true}
                   onClick={() => {}}
                 />
@@ -807,6 +888,14 @@ function ScreenCallGraph() {
                 </div>
               </div>
 
+              {/* Function Signature */}
+              <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: T.txt3, fontFamily: T.fontUI, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Signature
+                </div>
+                <FunctionSignature fn={selectedFn} />
+              </div>
+
               {/* Parameters */}
               <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: T.txt3, fontFamily: T.fontUI, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
@@ -820,14 +909,38 @@ function ScreenCallGraph() {
                 ))}
               </div>
 
-              {/* Return type */}
+              {/* Input / Output Schema */}
               <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: T.txt3, fontFamily: T.fontUI, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
-                  Return Type
+                <div style={{ fontSize: 9, fontWeight: 700, color: T.txt3, fontFamily: T.fontUI, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Contract
                 </div>
-                <span style={{ fontSize: 12, color: T.cyan, fontFamily: T.fontMono }}>
-                  {selectedFn.returnType}
-                </span>
+                <div style={{
+                  background: T.bg2, borderRadius: 6, padding: "8px 10px",
+                  fontFamily: T.fontMono, fontSize: 11, lineHeight: 1.7,
+                  border: `1px solid ${T.border}`,
+                }}>
+                  <div style={{ color: T.txt3, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+                    INPUT
+                  </div>
+                  {selectedFn.params.length === 0 ? (
+                    <div style={{ color: T.txt3, fontStyle: "italic", fontSize: 10, marginBottom: 6 }}>void</div>
+                  ) : (
+                    selectedFn.params.map((p, i) => (
+                      <div key={`io-${p.name}-${i}`} style={{ paddingLeft: 8 }}>
+                        <span style={{ color: T.cyan }}>{p.name}</span>
+                        <span style={{ color: T.txt3 }}>: </span>
+                        <span style={{ color: T.green }}>{p.type}</span>
+                      </div>
+                    ))
+                  )}
+                  <div style={{ borderTop: `1px solid ${T.border}`, margin: "6px 0" }} />
+                  <div style={{ color: T.txt3, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+                    OUTPUT
+                  </div>
+                  <div style={{ paddingLeft: 8 }}>
+                    <span style={{ color: T.amber }}>{selectedFn.returnType}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Call statistics */}
