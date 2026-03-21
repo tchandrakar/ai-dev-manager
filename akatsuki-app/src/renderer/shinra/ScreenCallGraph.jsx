@@ -125,7 +125,7 @@ function CallNode({ x, y, label, type, isCenter, onClick, onHover }) {
 
   return (
     <g
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick(e); }}
       onMouseEnter={() => { setHov(true); if (onHover) onHover(true); }}
       onMouseLeave={() => { setHov(false); if (onHover) onHover(false); }}
       style={{ cursor: "pointer" }}
@@ -241,6 +241,7 @@ function ScreenCallGraph() {
   const [fileDropOpen, setFileDropOpen] = useState(false);
   const svgRef = useRef(null);
   const dropRef = useRef(null);
+  const initialAnalyzeDone = useRef(false);
 
   const analyzing = indexStatus === "scanning";
 
@@ -311,12 +312,18 @@ function ScreenCallGraph() {
     if (keys.length > 0) setSelectedKey(keys[0]);
   }, [resolvedTarget, sharedFunctionMap]);
 
-  // Auto-analyze when index becomes ready or target changes
+  // Auto-analyze once when index becomes ready (user clicks Analyze manually for target changes)
   useEffect(() => {
     if (indexStatus === "ready" && sharedFunctionMap && sharedFunctionMap.size > 0) {
-      handleAnalyze();
+      if (!initialAnalyzeDone.current) {
+        initialAnalyzeDone.current = true;
+        handleAnalyze();
+      }
     }
-  }, [indexStatus, sharedFunctionMap, resolvedTarget]);
+    if (indexStatus !== "ready") {
+      initialAnalyzeDone.current = false;
+    }
+  }, [indexStatus, sharedFunctionMap]);
 
   // ── Selected function data ──────────────────────────────────────────────
   const selectedFn = useMemo(() => {
@@ -401,6 +408,8 @@ function ScreenCallGraph() {
     const centerX = width / 2;
     const centerY = height / 2;
 
+    const inTotal = incomingFns.length;
+    const inTruncated = inTotal > 8;
     const inNodes = incomingFns.slice(0, 8).map((fn, i, arr) => {
       const count = arr.length;
       const spacing = Math.min(55, (height - 80) / Math.max(count, 1));
@@ -413,6 +422,8 @@ function ScreenCallGraph() {
       };
     });
 
+    const outTotal = outgoingFns.length;
+    const outTruncated = outTotal > 8;
     const outNodes = outgoingFns.slice(0, 8).map((fn, i, arr) => {
       const count = arr.length;
       const spacing = Math.min(55, (height - 80) / Math.max(count, 1));
@@ -425,7 +436,7 @@ function ScreenCallGraph() {
       };
     });
 
-    return { width, height, centerX, centerY, inNodes, outNodes };
+    return { width, height, centerX, centerY, inNodes, outNodes, inTruncated, inTotal, outTruncated, outTotal };
   }, [selectedFn, incomingFns, outgoingFns]);
 
   // ── Click node to re-center ───────────────────────────────────────────
@@ -593,6 +604,11 @@ function ScreenCallGraph() {
                 onClick={() => handleNodeClick(fn.key)}
               />
             ))}
+            {selectedFn && svgLayout && svgLayout.inTruncated && (
+              <div style={{ padding: "6px 12px", fontSize: 10, color: T.txt3, fontFamily: T.fontUI, fontStyle: "italic", borderTop: `1px solid ${T.border}` }}>
+                Showing 8 of {svgLayout.inTotal} in graph
+              </div>
+            )}
           </div>
         </div>
 
@@ -752,7 +768,7 @@ function ScreenCallGraph() {
           borderLeft: `1px solid ${T.border}`, background: T.bg1,
         }}>
           <PanelHeader
-            title={selectedFn ? "Function Detail" : "Outgoing Calls"}
+            title="Function Detail"
             accent={T.purple}
             count={selectedFn ? outgoingFns.length : undefined}
           />
@@ -844,6 +860,11 @@ function ScreenCallGraph() {
                     onClick={() => handleNodeClick(fn.key)}
                   />
                 ))}
+                {svgLayout && svgLayout.outTruncated && (
+                  <div style={{ padding: "6px 12px", fontSize: 10, color: T.txt3, fontFamily: T.fontUI, fontStyle: "italic", borderTop: `1px solid ${T.border}` }}>
+                    Showing 8 of {svgLayout.outTotal} in graph
+                  </div>
+                )}
               </div>
 
               {/* Go to definition button */}
