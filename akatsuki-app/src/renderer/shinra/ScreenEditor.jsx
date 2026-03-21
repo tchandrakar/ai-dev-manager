@@ -713,11 +713,11 @@ function ScreenEditor() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [termOutput, aiSuggestion]);
 
-  // Terminal submit — send to persistent shell
+  // Terminal submit — send to persistent shell (or local echo if no shell)
   const handleTermSubmit = useCallback(async (e) => {
     e.preventDefault();
     const cmd = termInput.trim();
-    if (!cmd || !shellActive) return;
+    if (!cmd) return;
     setTermInput("");
     setHistoryIdx(-1);
     setAiSuggestion(null);
@@ -729,11 +729,16 @@ function ScreenEditor() {
       return next;
     });
 
-    // Write to shell stdin
-    try {
-      await window.akatsuki.shinra.shellWrite(cmd + "\n");
-    } catch {
-      setTermOutput(prev => prev + `[Error sending command]\n`);
+    if (shellActive) {
+      // Write to shell stdin
+      try {
+        await window.akatsuki.shinra.shellWrite(cmd + "\n");
+      } catch {
+        setTermOutput(prev => prev + `[Error sending command]\n`);
+      }
+    } else {
+      // Local echo mode when shell is not active
+      setTermOutput(prev => prev + `$ ${cmd}\n[Shell not connected]\n`);
     }
   }, [termInput, shellActive]);
 
@@ -965,7 +970,8 @@ function ScreenEditor() {
               <div style={{ flex: 1, position: "relative", overflow: "hidden", background: T.bg0 }}>
                 {/* Breadcrumb bar */}
                 <div style={{
-                  height: 26,
+                  height: 28,
+                  minHeight: 28,
                   display: "flex",
                   alignItems: "center",
                   padding: "0 12px",
@@ -979,8 +985,18 @@ function ScreenEditor() {
                 }}>
                   {activeFile.replace(workingDir || "", "").split("/").filter(Boolean).map((part, i, arr) => (
                     <React.Fragment key={i}>
-                      {i > 0 && <span style={{ color: T.txt3, opacity: 0.4, margin: "0 2px" }}>/</span>}
-                      <span style={{ color: i === arr.length - 1 ? T.txt : T.txt3 }}>{part}</span>
+                      {i > 0 && <span style={{ color: T.txt3, opacity: 0.4, margin: "0 2px", fontSize: 10 }}>{"\u203A"}</span>}
+                      <span
+                        style={{
+                          color: i === arr.length - 1 ? T.txt : T.txt3,
+                          cursor: "pointer",
+                          transition: "color 0.1s",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = T.txt; }}
+                        onMouseLeave={(e) => { if (i !== arr.length - 1) e.currentTarget.style.color = T.txt3; }}
+                      >
+                        {part}
+                      </span>
                     </React.Fragment>
                   ))}
                   <div style={{ flex: 1 }} />
@@ -1037,7 +1053,7 @@ function ScreenEditor() {
                   ref={editorRef}
                   style={{
                     position: "absolute",
-                    top: findOpen ? 58 : 26,
+                    top: findOpen ? 60 : 28,
                     left: 0,
                     right: 0,
                     bottom: 0,
@@ -1197,7 +1213,9 @@ function ScreenEditor() {
               >
                 {termOutput || (
                   <span style={{ color: T.txt3 }}>
-                    {workingDir ? "" : "No working directory. Open a folder to start the terminal."}
+                    {workingDir
+                      ? "Starting shell..."
+                      : "Open a folder to start the terminal. You can still type commands in echo mode."}
                   </span>
                 )}
 
@@ -1234,8 +1252,7 @@ function ScreenEditor() {
                   value={termInput}
                   onChange={(e) => setTermInput(e.target.value)}
                   onKeyDown={handleTermKeyDown}
-                  placeholder={shellActive ? "" : "Shell not active..."}
-                  disabled={!shellActive}
+                  placeholder={shellActive ? "" : "Type a command..."}
                   autoFocus
                   style={{
                     flex: 1,
