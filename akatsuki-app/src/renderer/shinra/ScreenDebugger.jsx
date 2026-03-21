@@ -75,6 +75,249 @@ const StepSvg = ({ children, color = T.txt }) => (
   </svg>
 );
 
+// ── Sparkline data generation ────────────────────────────────────────────────
+function generateSparkline(base, variance, count = 20) {
+  const data = [];
+  let val = base;
+  for (let i = 0; i < count; i++) {
+    val += (Math.random() - 0.5) * variance;
+    val = Math.max(0, val);
+    data.push(val);
+  }
+  return data;
+}
+
+// Static sparkline data (generated once at module level to avoid re-render flicker)
+const SPARKLINE_DATA = {
+  heap: generateSparkline(72, 15),
+  cpu: generateSparkline(34, 20),
+  eventLoop: generateSparkline(1.8, 1.2),
+  handles: generateSparkline(42, 10),
+};
+
+// ── Sparkline SVG component ─────────────────────────────────────────────────
+function Sparkline({ data, color, width = 120, height = 30 }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = width / (data.length - 1);
+
+  const points = data.map((val, i) => {
+    const x = i * stepX;
+    const y = height - ((val - min) / range) * (height - 2) - 1;
+    return `${x},${y}`;
+  }).join(" ");
+
+  // Build area path for gradient fill
+  const areaPath = data.map((val, i) => {
+    const x = i * stepX;
+    const y = height - ((val - min) / range) * (height - 2) - 1;
+    return `${i === 0 ? "M" : "L"}${x},${y}`;
+  }).join(" ") + ` L${width},${height} L0,${height} Z`;
+
+  const gradId = `spark-${color.replace("#", "")}`;
+
+  return (
+    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ── APM Stat Card ───────────────────────────────────────────────────────────
+function StatCard({ label, value, unit, color, sparkData }) {
+  const [hov, setHov] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: hov ? T.bg3 : T.bg2,
+        border: `1px solid ${T.border}`,
+        borderRadius: 8,
+        padding: "10px 14px 8px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        transition: "background 0.15s",
+        cursor: "default",
+      }}
+    >
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 9,
+        fontWeight: 700,
+        textTransform: "uppercase",
+        letterSpacing: 0.8,
+        color: T.txt3,
+        fontFamily: T.fontUI,
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+        {label}
+      </div>
+      <div style={{
+        display: "flex",
+        alignItems: "baseline",
+        gap: 4,
+      }}>
+        <span style={{ fontSize: 20, fontWeight: 700, color: T.txt, fontFamily: T.fontMono, lineHeight: 1.1 }}>
+          {value}
+        </span>
+        <span style={{ fontSize: 10, color: T.txt3, fontFamily: T.fontUI }}>
+          {unit}
+        </span>
+      </div>
+      <div style={{ marginTop: 2 }}>
+        <Sparkline data={sparkData} color={color} width={120} height={28} />
+      </div>
+    </div>
+  );
+}
+
+// ── Performance Timeline Chart ──────────────────────────────────────────────
+const PERF_TIMELINE_DATA = (() => {
+  const points = [];
+  let val = 150;
+  for (let i = 0; i < 30; i++) {
+    val += (Math.random() - 0.4) * 20;
+    val = Math.max(100, Math.min(320, val));
+    points.push(val);
+  }
+  return points;
+})();
+
+function PerformanceTimeline() {
+  const data = PERF_TIMELINE_DATA;
+  const W = 600; // inner chart width (SVG viewBox coords)
+  const H = 110;
+  const padL = 36;
+  const padR = 8;
+  const padT = 4;
+  const padB = 18;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const min = 0;
+  const max = 350;
+  const range = max - min;
+  const stepX = chartW / (data.length - 1);
+
+  const toX = (i) => padL + i * stepX;
+  const toY = (val) => padT + chartH - ((val - min) / range) * chartH;
+
+  // Build polyline points
+  const linePoints = data.map((val, i) => `${toX(i)},${toY(val)}`).join(" ");
+
+  // Build area path
+  const areaPath = data.map((val, i) => {
+    const x = toX(i);
+    const y = toY(val);
+    return `${i === 0 ? "M" : "L"}${x},${y}`;
+  }).join(" ") + ` L${toX(data.length - 1)},${padT + chartH} L${padL},${padT + chartH} Z`;
+
+  // Y-axis labels
+  const yTicks = [0, 100, 200, 300];
+  // X-axis labels (every 5 points = 5s)
+  const xTicks = [0, 5, 10, 15, 20, 25, 29];
+
+  // Grid lines
+  const gridLines = yTicks.map((val) => toY(val));
+
+  return (
+    <div style={{
+      background: T.bg2,
+      border: `1px solid ${T.border}`,
+      borderRadius: 8,
+      padding: "10px 12px 6px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+    }}>
+      <div style={{
+        fontSize: 9,
+        fontWeight: 700,
+        textTransform: "uppercase",
+        letterSpacing: 0.8,
+        color: T.txt3,
+        fontFamily: T.fontUI,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+      }}>
+        <span style={{ width: 3, height: 12, background: T.blue, borderRadius: 2 }} />
+        Performance Timeline
+        <span style={{ marginLeft: "auto", fontSize: 9, color: T.txt3, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+          Memory (MB)
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: "100%", height: 140, display: "block" }}
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={T.blue} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={T.blue} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        {gridLines.map((y, i) => (
+          <line key={i} x1={padL} y1={y} x2={W - padR} y2={y} stroke={T.border} strokeWidth={0.5} strokeDasharray="3,3" />
+        ))}
+
+        {/* Y-axis labels */}
+        {yTicks.map((val, i) => (
+          <text key={i} x={padL - 4} y={toY(val) + 3} textAnchor="end" fontSize={8} fill={T.txt3} fontFamily={T.fontMono}>
+            {val}
+          </text>
+        ))}
+
+        {/* X-axis labels */}
+        {xTicks.map((idx) => (
+          <text key={idx} x={toX(idx)} y={H - 2} textAnchor="middle" fontSize={8} fill={T.txt3} fontFamily={T.fontMono}>
+            {idx * 1}s
+          </text>
+        ))}
+
+        {/* Area fill */}
+        <path d={areaPath} fill="url(#perfGrad)" />
+
+        {/* Line */}
+        <polyline
+          points={linePoints}
+          fill="none"
+          stroke={T.blue}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 // ── Named sub-components ────────────────────────────────────────────────────
 
 function BreakpointGutter({ lineNum, hasBreakpoint, isCurrentLine, onToggle }) {
@@ -260,22 +503,55 @@ function WatchItem({ expression, value, onRemove }) {
 
 function ConsoleEntry({ entry }) {
   const color = entry.type === "error" ? T.red
+    : entry.type === "warn" ? T.amber
     : entry.type === "info" ? T.cyan
     : entry.type === "input" ? T.purple
-    : T.txt;
+    : T.txt2;
+
+  const levelTag = entry.type === "error" ? "ERR"
+    : entry.type === "warn" ? "WRN"
+    : entry.type === "info" ? "INF"
+    : entry.type === "input" ? null
+    : null;
+
+  const ts = entry.ts
+    ? new Date(entry.ts).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
 
   return (
     <div style={{
-      padding: "2px 10px",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 8,
+      padding: "3px 10px",
       fontSize: 11,
       fontFamily: T.fontMono,
-      color,
       whiteSpace: "pre-wrap",
       wordBreak: "break-all",
       borderBottom: `1px solid ${T.border}08`,
+      background: entry.type === "error" ? `${T.red}08` : entry.type === "warn" ? `${T.amber}06` : "transparent",
     }}>
-      {entry.type === "input" && <span style={{ color: T.txt3 }}>&gt; </span>}
-      {entry.text}
+      {ts && (
+        <span style={{ color: T.txt3, fontSize: 10, flexShrink: 0, minWidth: 58, fontVariantNumeric: "tabular-nums" }}>
+          {ts}
+        </span>
+      )}
+      {levelTag && (
+        <span style={{
+          color,
+          fontSize: 9,
+          fontWeight: 700,
+          flexShrink: 0,
+          minWidth: 26,
+          letterSpacing: 0.3,
+        }}>
+          {levelTag}
+        </span>
+      )}
+      <span style={{ color, flex: 1 }}>
+        {entry.type === "input" && <span style={{ color: T.txt3 }}>&gt; </span>}
+        {entry.text}
+      </span>
     </div>
   );
 }
@@ -397,7 +673,19 @@ function ScreenDebugger() {
   const [watchInput, setWatchInput] = useState("");
 
   // Console
-  const [consoleEntries, setConsoleEntries] = useState([]);
+  const [consoleEntries, setConsoleEntries] = useState(() => {
+    const now = Date.now();
+    return [
+      { text: "Debugger attached to process 14892", type: "info", ts: now - 12000 },
+      { text: "Loaded source map for /src/index.ts", type: "output", ts: now - 11500 },
+      { text: "Breakpoint set at line 42 in app.ts", type: "info", ts: now - 10000 },
+      { text: "Warning: Module 'fs' imported but unused", type: "warn", ts: now - 8500 },
+      { text: "Server listening on http://localhost:3000", type: "output", ts: now - 6000 },
+      { text: "TypeError: Cannot read property 'id' of undefined", type: "error", ts: now - 3200 },
+      { text: "  at processRequest (app.ts:42:18)", type: "error", ts: now - 3200 },
+      { text: "Connection pool: 3/10 active connections", type: "info", ts: now - 1500 },
+    ];
+  });
   const [consoleInput, setConsoleInput] = useState("");
   const [consoleOpen, setConsoleOpen] = useState(true);
 
@@ -859,10 +1147,30 @@ function ScreenDebugger() {
         </div>
       </div>
 
+      {/* ── APM Metric Cards ────────────────────────────────────────── */}
+      <div style={{
+        display: "flex",
+        gap: 10,
+        padding: "10px 12px",
+        background: T.bg1,
+        borderBottom: `1px solid ${T.border}`,
+        overflowX: "auto",
+      }}>
+        <StatCard label="Heap Usage" value="72.4" unit="MB" color={T.blue} sparkData={SPARKLINE_DATA.heap} />
+        <StatCard label="CPU Usage" value="34.2" unit="%" color={T.green} sparkData={SPARKLINE_DATA.cpu} />
+        <StatCard label="Event Loop Delay" value="1.8" unit="ms" color={T.amber} sparkData={SPARKLINE_DATA.eventLoop} />
+        <StatCard label="Active Handles" value="42" unit="" color={T.purple} sparkData={SPARKLINE_DATA.handles} />
+      </div>
+
       {/* ── Main content area ──────────────────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* ── Source Panel (left) ─────────────────────────────────────── */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Performance Timeline */}
+          <div style={{ padding: "10px 12px 0", background: T.bg1 }}>
+            <PerformanceTimeline />
+          </div>
+
           {/* File tab bar */}
           <div
             style={{
@@ -1246,7 +1554,7 @@ function ScreenDebugger() {
 
         {/* Console content */}
         {consoleOpen && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: T.bg0 }}>
             <div style={{ flex: 1, overflow: "auto", padding: "4px 0" }}>
               {consoleEntries.length === 0 ? (
                 <div
