@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useRef, useCallback, Suspense, lazy } from "react";
+import { Canvas } from "@react-three/fiber";
 import { T } from "../tokens";
 
-// ── Lazy-load Three.js to avoid blocking initial render ────────────────────
-const Canvas = lazy(() => import("@react-three/fiber").then(m => ({ default: m.Canvas })));
+// ── Lazy-load Three.js scene to avoid blocking initial render ──────────────
 const ThreeScene = lazy(() => import("./Graph3DScene"));
 
 // ── 3D Force-Directed Layout ───────────────────────────────────────────────
@@ -206,6 +206,41 @@ function LoadingFallback() {
   );
 }
 
+// ── Error Boundary for WebGL failures ─────────────────────────────────────
+
+class Graph3DErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexDirection: "column", gap: 12,
+          width: "100%", height: "100%",
+          background: T.bg0, color: T.txt2, fontFamily: T.fontUI, fontSize: 13,
+        }}>
+          <div style={{ fontSize: 32, opacity: 0.3 }}>◇</div>
+          <div>3D rendering unavailable</div>
+          <div style={{ fontSize: 11, color: T.txt3, maxWidth: 320, textAlign: "center" }}>
+            WebGL context could not be created. This may happen in certain browser environments.
+            The 3D graph works in the installed Electron app.
+          </div>
+          <div style={{ fontSize: 10, color: T.txt3, fontFamily: T.fontMono }}>
+            {this.state.error?.message || "Unknown error"}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Main Export ─────────────────────────────────────────────────────────────
 
 export default function Graph3D({
@@ -272,6 +307,7 @@ export default function Graph3D({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", ...style }}>
+      <Graph3DErrorBoundary>
       <Suspense fallback={<LoadingFallback />}>
         <Canvas
           camera={{ position: [0, 0, 80], fov: 60, near: 0.1, far: 1000 }}
@@ -294,6 +330,7 @@ export default function Graph3D({
           />
         </Canvas>
       </Suspense>
+      </Graph3DErrorBoundary>
       <ZoomControls
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}

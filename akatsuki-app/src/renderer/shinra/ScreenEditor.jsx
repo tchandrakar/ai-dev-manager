@@ -781,6 +781,7 @@ function ScreenEditor() {
   const editorRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [editorHeight, setEditorHeight] = useState(400);
+  const [cmdHeld, setCmdHeld] = useState(false);
 
   // Find in file
   const [findOpen, setFindOpen] = useState(false);
@@ -1132,6 +1133,19 @@ function ScreenEditor() {
     const q = fileSearchQuery.toLowerCase();
     return paletteFiles.filter((fp) => fp.toLowerCase().includes(q));
   }, [paletteFiles, fileSearchQuery]);
+
+  // ── Track Cmd/Ctrl held for go-to-definition affordance ──────────────────
+  useEffect(() => {
+    const down = (e) => { if (e.metaKey || e.ctrlKey) setCmdHeld(true); };
+    const up = (e) => { if (!e.metaKey && !e.ctrlKey) setCmdHeld(false); };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", () => setCmdHeld(false));
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   // ── Track editor scroll for minimap ───────────────────────────────────────
   useEffect(() => {
@@ -1668,6 +1682,7 @@ function ScreenEditor() {
                         zIndex: 2,
                         letterSpacing: "normal",
                         wordSpacing: "normal",
+                        pointerEvents: cmdHeld ? "none" : "auto",
                       }}
                     />
 
