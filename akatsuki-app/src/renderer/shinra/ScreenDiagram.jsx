@@ -1,11 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { T } from "../tokens";
 import { Btn, PanelHeader, Badge } from "../components";
 import { useShinra } from "./ShinraApp";
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const NODE_W = 160;
-const NODE_H = 36;
+const Graph3D = lazy(() => import("./Graph3D"));
 
 // Color by file category
 function categorize(filePath) {
@@ -30,110 +28,6 @@ function extOf(name) {
 function shortName(fullPath, workingDir) {
   if (!workingDir) return fullPath;
   return fullPath.startsWith(workingDir) ? fullPath.slice(workingDir.length + 1) : fullPath;
-}
-
-// Simple force-directed layout
-function layoutNodes(nodes, edges) {
-  if (nodes.length === 0) return [];
-
-  // Compute in-degree for vertical layering
-  const inDeg = {};
-  const outDeg = {};
-  for (const n of nodes) { inDeg[n.id] = 0; outDeg[n.id] = 0; }
-  for (const e of edges) {
-    if (inDeg[e.to] !== undefined) inDeg[e.to]++;
-    if (outDeg[e.from] !== undefined) outDeg[e.from]++;
-  }
-
-  // Topological sort via Kahn's algorithm (best-effort for cycles)
-  const adj = {};
-  const inDegCopy = { ...inDeg };
-  for (const n of nodes) adj[n.id] = [];
-  for (const e of edges) {
-    if (adj[e.from]) adj[e.from].push(e.to);
-  }
-
-  const layers = [];
-  const assigned = new Set();
-  let frontier = nodes.filter(n => inDegCopy[n.id] === 0).map(n => n.id);
-  if (frontier.length === 0) frontier = [nodes[0].id]; // break cycles
-
-  while (frontier.length > 0 && assigned.size < nodes.length) {
-    layers.push([...frontier]);
-    for (const id of frontier) assigned.add(id);
-    const next = new Set();
-    for (const id of frontier) {
-      for (const dep of (adj[id] || [])) {
-        inDegCopy[dep]--;
-        if (inDegCopy[dep] <= 0 && !assigned.has(dep)) next.add(dep);
-      }
-    }
-    frontier = [...next];
-    // Safety: if no progress, force unassigned nodes into next layer
-    if (frontier.length === 0 && assigned.size < nodes.length) {
-      frontier = nodes.filter(n => !assigned.has(n.id)).slice(0, 8).map(n => n.id);
-    }
-  }
-
-  // Position nodes: layers top-to-bottom, spread horizontally
-  const positions = {};
-  const layerGapY = 90;
-  const nodeGapX = 200;
-  const startY = 60;
-
-  for (let li = 0; li < layers.length; li++) {
-    const layer = layers[li];
-    const totalW = layer.length * nodeGapX;
-    const startX = Math.max(60, 400 - totalW / 2);
-    for (let ni = 0; ni < layer.length; ni++) {
-      positions[layer[ni]] = {
-        x: startX + ni * nodeGapX,
-        y: startY + li * layerGapY,
-      };
-    }
-  }
-
-  // Light force-based relaxation (push overlapping nodes apart)
-  const pos = nodes.map(n => ({ ...positions[n.id], id: n.id }));
-  for (let iter = 0; iter < 40; iter++) {
-    for (let i = 0; i < pos.length; i++) {
-      for (let j = i + 1; j < pos.length; j++) {
-        const dx = pos[j].x - pos[i].x;
-        const dy = pos[j].y - pos[i].y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const minDist = 180;
-        if (dist < minDist) {
-          const force = (minDist - dist) * 0.3;
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force * 0.3; // less vertical push
-          pos[i].x -= fx;
-          pos[j].x += fx;
-          pos[i].y -= fy;
-          pos[j].y += fy;
-        }
-      }
-    }
-
-    // Edge attraction
-    for (const e of edges) {
-      const a = pos.find(p => p.id === e.from);
-      const b = pos.find(p => p.id === e.to);
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ideal = 180;
-      const force = (dist - ideal) * 0.01;
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
-      a.x += fx;
-      a.y += fy;
-      b.x -= fx;
-      b.y -= fy;
-    }
-  }
-
-  return pos.map(p => ({ id: p.id, x: Math.round(p.x), y: Math.round(p.y) }));
 }
 
 // Detect circular dependencies
@@ -173,165 +67,6 @@ function findCycles(nodes, edges) {
 }
 
 // ── Named sub-components ─────────────────────────────────────────────────────
-
-// File type icon paths (small SVG path data for common file types)
-function fileIcon(cat) {
-  // Returns a small icon path scaled for 14x14 viewBox
-  switch (cat) {
-    case "component": return "M3 1h8l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V2a1 1 0 011-1zm4 5l-2 3h4l-2 3"; // JSX
-    case "hook": return "M7 1a6 6 0 110 12A6 6 0 017 1zm0 3v3l2 2"; // hook / circle-clock
-    case "state": return "M2 3h10v2H2zm0 4h10v2H2zm0 4h7v2H2z"; // state / layers
-    case "test": return "M5 1l-4 6h3v6h2V7h3L5 1z"; // test / lightning
-    case "util": return "M6 1L1 7l5 6 1-1-4-5 4-5-1-1zm5 0l-1 1 4 5-4 5 1 1 5-6-5-6z"; // util / code brackets
-    case "entry": return "M7 1l6 6-6 6-1-1 5-5-5-5 1-1z"; // entry / chevron
-    case "types": return "M2 2h10v3H8v2h3v3H8v3H5V10H2V7h3V5H2V2z"; // types / T-shape
-    default: return "M3 1h6l4 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2a1 1 0 011-1z"; // generic file
-  }
-}
-
-function GraphNode({ node, pos, isSelected, isInCycle, isHovered, onClick, onMouseDown, onHover }) {
-  const { color, cat } = categorize(node.id);
-  const name = node.name;
-
-  // Visual states
-  const borderColor = isInCycle
-    ? T.red
-    : isSelected
-      ? T.cyan
-      : isHovered
-        ? T.blue
-        : T.border;
-  const bgColor = isHovered
-    ? T.bg3
-    : isSelected
-      ? `${T.cyan}12`
-      : isInCycle
-        ? `${T.red}0A`
-        : T.bg2;
-  const strokeW = isSelected ? 2 : isInCycle ? 1.5 : 1;
-  const strokeDash = isInCycle ? "4 3" : "none";
-
-  const iconColor = isInCycle ? T.red : color;
-  const truncated = name.length > 16 ? name.slice(0, 14) + "\u2026" : name;
-
-  return (
-    <g
-      transform={`translate(${pos.x}, ${pos.y})`}
-      style={{ cursor: "pointer" }}
-      onClick={(e) => { e.stopPropagation(); onClick(node.id); }}
-      onMouseDown={(e) => onMouseDown(e, node.id)}
-      onMouseEnter={() => onHover(node.id)}
-      onMouseLeave={() => onHover(null)}
-    >
-      {/* Shadow for selected nodes */}
-      {isSelected && (
-        <rect
-          x={-NODE_W / 2 + 1}
-          y={-NODE_H / 2 + 2}
-          width={NODE_W}
-          height={NODE_H}
-          rx={8}
-          ry={8}
-          fill="none"
-          stroke={T.cyan}
-          strokeWidth={1}
-          opacity={0.2}
-        />
-      )}
-
-      {/* Main rect */}
-      <rect
-        x={-NODE_W / 2}
-        y={-NODE_H / 2}
-        width={NODE_W}
-        height={NODE_H}
-        rx={8}
-        ry={8}
-        fill={bgColor}
-        stroke={borderColor}
-        strokeWidth={strokeW}
-        strokeDasharray={strokeDash}
-      />
-
-      {/* File type icon on the left */}
-      <g transform={`translate(${-NODE_W / 2 + 10}, ${-7})`}>
-        <svg width="14" height="14" viewBox="0 0 14 14">
-          <path d={fileIcon(cat)} fill={iconColor} opacity={0.85} />
-        </svg>
-      </g>
-
-      {/* File name */}
-      <text
-        x={4}
-        y={1}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill={isSelected ? T.txt : isHovered ? T.txt : T.txt2}
-        fontSize={11}
-        fontFamily={T.fontUI}
-        fontWeight={isSelected ? 700 : 500}
-      >
-        {truncated}
-      </text>
-
-      {/* Cycle indicator dot on top-right */}
-      {isInCycle && (
-        <circle
-          cx={NODE_W / 2 - 8}
-          cy={-NODE_H / 2 + 8}
-          r={3}
-          fill={T.red}
-        />
-      )}
-    </g>
-  );
-}
-
-function GraphEdge({ from, to, isInCycle, highlighted }) {
-  if (!from || !to) return null;
-
-  const x1 = from.x;
-  const y1 = from.y + NODE_H / 2;
-  const x2 = to.x;
-  const y2 = to.y - NODE_H / 2;
-
-  // Smooth S-curve bezier: control points offset vertically for nice flow
-  const dy = Math.abs(y2 - y1);
-  const cpOffset = Math.max(40, dy * 0.45);
-  const d = `M ${x1} ${y1} C ${x1} ${y1 + cpOffset}, ${x2} ${y2 - cpOffset}, ${x2} ${y2}`;
-
-  // Styling per spec
-  const strokeColor = isInCycle ? T.red : highlighted ? T.blue : T.txt3;
-  const strokeWidth = isInCycle ? 2 : highlighted ? 2 : 1.5;
-  const opacity = highlighted ? 1 : isInCycle ? 0.9 : 0.4;
-  const dashArray = isInCycle ? "6 4" : "none";
-
-  // Arrowhead: small triangle at endpoint, pointing in the direction of the curve
-  // The curve arrives roughly vertically at the target, so triangle points up
-  const arrowSize = 5;
-  const ax = x2;
-  const ay = y2;
-
-  return (
-    <g>
-      <path
-        d={d}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth={strokeWidth}
-        strokeDasharray={dashArray}
-        opacity={opacity}
-        strokeLinecap="round"
-      />
-      {/* Arrowhead triangle */}
-      <polygon
-        points={`${ax - arrowSize},${ay - arrowSize * 1.5} ${ax},${ay} ${ax + arrowSize},${ay - arrowSize * 1.5}`}
-        fill={strokeColor}
-        opacity={opacity}
-      />
-    </g>
-  );
-}
 
 function FileListItem({ fileId, node, connectionCount, isSelected, onClick }) {
   const { color, label } = categorize(fileId);
@@ -440,29 +175,6 @@ function HealthGauge({ score }) {
   );
 }
 
-function ZoomButton({ label, title, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={title}
-      style={{
-        width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
-        background: hovered ? T.bg3 : T.bg2,
-        border: `1px solid ${T.border}`,
-        borderRadius: 4, cursor: "pointer",
-        fontSize: 14, color: hovered ? T.txt : T.txt2,
-        fontFamily: T.fontUI, fontWeight: 500,
-        userSelect: "none", transition: "background 0.1s, color 0.1s",
-      }}
-    >
-      {label}
-    </div>
-  );
-}
-
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function ScreenDiagram() {
@@ -531,33 +243,7 @@ export default function ScreenDiagram() {
   // UI state
   const [selectedNode, setSelectedNode] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [positions, setPositions] = useState([]); // [{id, x, y}]
   const [orphansExpanded, setOrphansExpanded] = useState(false);
-
-  // Pan / zoom
-  const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0 });
-  const dragNodeId = useRef(null);
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const svgRef = useRef(null);
-  const prevGraphLen = useRef(0);
-
-  // Auto-layout when graph changes
-  useEffect(() => {
-    if (graph && graph.nodes.length > 0) {
-      const laid = layoutNodes(graph.nodes, graph.edges);
-      setPositions(laid);
-      // Only reset pan/zoom on initial load or when the graph size changes significantly
-      const prevLen = prevGraphLen.current;
-      const curLen = graph.nodes.length;
-      const isBigChange = prevLen === 0 || Math.abs(curLen - prevLen) > prevLen * 0.3;
-      if (isBigChange) {
-        setViewTransform({ x: 0, y: 0, scale: 1 });
-      }
-      prevGraphLen.current = curLen;
-    }
-  }, [graph]);
 
   // Open file in editor from graph
   const handleOpenInEditor = useCallback((filePath) => {
@@ -629,114 +315,23 @@ export default function ScreenDiagram() {
     return [...graph.nodes].sort((a, b) => (connectionCounts[b.id] || 0) - (connectionCounts[a.id] || 0));
   }, [graph, connectionCounts]);
 
-  // ── Pan / zoom handlers ────────────────────────────────────────────────────
-  const handleCanvasMouseDown = useCallback((e) => {
-    if (e.button !== 0) return;
-    isPanning.current = true;
-    panStart.current = { x: e.clientX - viewTransform.x, y: e.clientY - viewTransform.y };
-  }, [viewTransform]);
+  // ── Graph3D data transforms ─────────────────────────────────────────────────
+  const diagramNodes = useMemo(() => {
+    if (!graph) return [];
+    return graph.nodes.map(n => {
+      const { color, cat } = categorize(n.id);
+      return { id: n.id, label: n.name, type: cat, color };
+    });
+  }, [graph]);
 
-  const handleCanvasMouseMove = useCallback((e) => {
-    if (dragNodeId.current) {
-      // Dragging a node
-      const svgEl = svgRef.current;
-      if (!svgEl) return;
-      const rect = svgEl.getBoundingClientRect();
-      const mx = (e.clientX - rect.left - viewTransform.x) / viewTransform.scale;
-      const my = (e.clientY - rect.top - viewTransform.y) / viewTransform.scale;
-      setPositions(prev => prev.map(p =>
-        p.id === dragNodeId.current
-          ? { ...p, x: Math.round(mx - dragOffset.current.x), y: Math.round(my - dragOffset.current.y) }
-          : p
-      ));
-      return;
-    }
-    if (!isPanning.current) return;
-    setViewTransform(prev => ({
-      ...prev,
-      x: e.clientX - panStart.current.x,
-      y: e.clientY - panStart.current.y,
+  const diagramEdges = useMemo(() => {
+    if (!graph) return [];
+    return graph.edges.map(e => ({
+      from: e.from, to: e.to,
+      color: cycleEdgeSet.has(`${e.from}|${e.to}`) ? T.red : undefined,
+      dashed: cycleEdgeSet.has(`${e.from}|${e.to}`),
     }));
-  }, [viewTransform]);
-
-  const handleCanvasMouseUp = useCallback(() => {
-    isPanning.current = false;
-    dragNodeId.current = null;
-  }, []);
-
-  const handleWheel = useCallback((e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setViewTransform(prev => {
-      const newScale = Math.min(3, Math.max(0.15, prev.scale * delta));
-      // Zoom toward mouse position
-      const svgEl = svgRef.current;
-      if (!svgEl) return { ...prev, scale: newScale };
-      const rect = svgEl.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      return {
-        scale: newScale,
-        x: mx - (mx - prev.x) * (newScale / prev.scale),
-        y: my - (my - prev.y) * (newScale / prev.scale),
-      };
-    });
-  }, []);
-
-  const handleNodeMouseDown = useCallback((e, nodeId) => {
-    e.stopPropagation();
-    dragNodeId.current = nodeId;
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    const svgRect = svgEl.getBoundingClientRect();
-    const mouseX = (e.clientX - svgRect.left) / viewTransform.scale - viewTransform.x / viewTransform.scale;
-    const mouseY = (e.clientY - svgRect.top) / viewTransform.scale - viewTransform.y / viewTransform.scale;
-    const pos = positions.find(p => p.id === nodeId);
-    if (pos) {
-      dragOffset.current = { x: mouseX - pos.x, y: mouseY - pos.y };
-    }
-  }, [viewTransform, positions]);
-
-  // Attach wheel with passive:false
-  useEffect(() => {
-    const el = svgRef.current;
-    if (!el) return;
-    el.addEventListener("wheel", handleWheel, { passive: false });
-    return () => el.removeEventListener("wheel", handleWheel);
-  }, [handleWheel]);
-
-  // ── Position lookup ────────────────────────────────────────────────────────
-  const posMap = useMemo(() => {
-    const m = {};
-    for (const p of positions) m[p.id] = p;
-    return m;
-  }, [positions]);
-
-  // ── Fit to view ────────────────────────────────────────────────────────────
-  const fitToView = useCallback(() => {
-    if (positions.length === 0) return;
-    const xs = positions.map(p => p.x);
-    const ys = positions.map(p => p.y);
-    const minX = Math.min(...xs) - NODE_W;
-    const maxX = Math.max(...xs) + NODE_W;
-    const minY = Math.min(...ys) - NODE_H;
-    const maxY = Math.max(...ys) + NODE_H;
-    const graphW = maxX - minX;
-    const graphH = maxY - minY;
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    const rect = svgEl.getBoundingClientRect();
-    const scaleX = rect.width / graphW;
-    const scaleY = rect.height / graphH;
-    const scale = Math.min(scaleX, scaleY, 1.5) * 0.85;
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-    setViewTransform({
-      scale,
-      x: rect.width / 2 - cx * scale,
-      y: rect.height / 2 - cy * scale,
-    });
-  }, [positions]);
+  }, [graph, cycleEdgeSet]);
 
   // Toggle a filter checkbox
   const toggleFilter = useCallback((ext) => {
@@ -899,8 +494,8 @@ export default function ScreenDiagram() {
         )}
       </div>
 
-      {/* ── Center Canvas ─────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflow: "hidden", position: "relative", background: T.bg0 }}>
+      {/* ── Center Canvas — 3D Graph ────────────────────────────────────── */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", background: T.bg0 }}>
 
         {/* Info badge: node count + edge count — top-right */}
         {graph && (
@@ -915,37 +510,6 @@ export default function ScreenDiagram() {
           </div>
         )}
 
-        {/* Zoom controls — bottom-right, stacked vertically */}
-        <div style={{
-          position: "absolute", bottom: 10, right: 10, zIndex: 10,
-          display: "flex", flexDirection: "column", gap: 2,
-        }}>
-          <ZoomButton
-            label="+"
-            title="Zoom in"
-            onClick={() => setViewTransform(prev => ({ ...prev, scale: Math.min(3, prev.scale * 1.25) }))}
-          />
-          <ZoomButton
-            label={"\u2212"}
-            title="Zoom out"
-            onClick={() => setViewTransform(prev => ({ ...prev, scale: Math.max(0.15, prev.scale * 0.8) }))}
-          />
-          <ZoomButton
-            label={"\u27F3"}
-            title="Fit to view"
-            onClick={fitToView}
-          />
-        </div>
-
-        {/* Zoom percentage — bottom-left */}
-        <div style={{
-          position: "absolute", bottom: 10, left: 10, zIndex: 10,
-          fontSize: 10, color: T.txt3, fontFamily: T.fontMono,
-          background: `${T.bg2}cc`, padding: "2px 8px", borderRadius: 4,
-        }}>
-          {Math.round(viewTransform.scale * 100)}%
-        </div>
-
         {!graph ? (
           <div style={{
             flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -957,73 +521,16 @@ export default function ScreenDiagram() {
             </span>
           </div>
         ) : (
-          <svg
-            ref={svgRef}
-            width="100%"
-            height="100%"
-            style={{ cursor: isPanning.current ? "grabbing" : "grab", display: "block" }}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-          >
-            {/* Dot grid pattern */}
-            <defs>
-              <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-                <circle cx="10" cy="10" r="1" fill={T.txt3} opacity="0.15" />
-              </pattern>
-              {/* Arrowhead marker for normal edges */}
-              <marker id="arrowNormal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                <path d="M0,0 L8,3 L0,6" fill={T.txt3} opacity="0.4" />
-              </marker>
-              {/* Arrowhead marker for highlighted edges */}
-              <marker id="arrowHighlight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                <path d="M0,0 L8,3 L0,6" fill={T.blue} />
-              </marker>
-              {/* Arrowhead marker for cycle edges */}
-              <marker id="arrowCycle" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                <path d="M0,0 L8,3 L0,6" fill={T.red} opacity="0.9" />
-              </marker>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#dotGrid)" />
-
-            {/* Transformed group */}
-            <g transform={`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`}>
-              {/* Edges */}
-              {graph.edges.map((edge, i) => {
-                const isConnectedToHovered = hoveredNode && (edge.from === hoveredNode || edge.to === hoveredNode);
-                const isConnectedToSelected = selectedNode && (edge.from === selectedNode || edge.to === selectedNode);
-                return (
-                  <GraphEdge
-                    key={`${edge.from}|${edge.to}|${i}`}
-                    from={posMap[edge.from]}
-                    to={posMap[edge.to]}
-                    isInCycle={cycleEdgeSet.has(`${edge.from}|${edge.to}`)}
-                    highlighted={isConnectedToHovered || isConnectedToSelected}
-                  />
-                );
-              })}
-
-              {/* Nodes */}
-              {graph.nodes.map(node => {
-                const pos = posMap[node.id];
-                if (!pos) return null;
-                return (
-                  <GraphNode
-                    key={node.id}
-                    node={node}
-                    pos={pos}
-                    isSelected={selectedNode === node.id}
-                    isHovered={hoveredNode === node.id}
-                    isInCycle={cycleNodeSet.has(node.id)}
-                    onClick={setSelectedNode}
-                    onMouseDown={handleNodeMouseDown}
-                    onHover={setHoveredNode}
-                  />
-                );
-              })}
-            </g>
-          </svg>
+          <Suspense fallback={<div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: T.txt2, fontFamily: T.fontUI, fontSize: 13 }}>Loading 3D graph...</div>}>
+            <Graph3D
+              nodes={diagramNodes}
+              edges={diagramEdges}
+              selectedNode={selectedNode}
+              onNodeClick={setSelectedNode}
+              onNodeHover={setHoveredNode}
+              style={{ flex: 1 }}
+            />
+          </Suspense>
         )}
       </div>
 

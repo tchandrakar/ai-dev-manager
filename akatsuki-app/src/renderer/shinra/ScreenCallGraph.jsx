@@ -1,7 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { T } from "../tokens";
 import { Btn, PanelHeader, Badge, Spinner } from "../components";
 import { useShinra } from "./ShinraApp";
+
+const Graph3D = lazy(() => import("./Graph3D"));
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TYPE_COLORS = {
@@ -10,8 +12,6 @@ const TYPE_COLORS = {
   callback: T.amber,
   async: T.purple,
 };
-const NODE_RADIUS = 28;
-const CENTER_RADIUS = 38;
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
@@ -173,134 +173,31 @@ function CalleeItem({ fnData, isSelected, onClick }) {
   );
 }
 
-function CallNode({ x, y, label, type, isCenter, onClick, onHover, file }) {
-  const [hov, setHov] = useState(false);
-  const color = TYPE_COLORS[type] || T.green;
-  const r = isCenter ? CENTER_RADIUS : NODE_RADIUS;
-  const maxChars = isCenter ? 15 : 12;
-  const truncated = label.length > maxChars ? label.slice(0, maxChars - 1) + "\u2026" : label;
-  const tooltipText = file ? `${label} \u2014 ${file.split("/").pop()}` : label;
+// ── NL Search ───────────────────────────────────────────────────────────────
 
-  return (
-    <g
-      onClick={(e) => { e.stopPropagation(); onClick(e); }}
-      onMouseEnter={() => { setHov(true); if (onHover) onHover(true); }}
-      onMouseLeave={() => { setHov(false); if (onHover) onHover(false); }}
-      style={{ cursor: "pointer" }}
-    >
-      <title>{tooltipText}</title>
-      {/* Glow behind node */}
-      <circle
-        cx={x} cy={y} r={r + 6}
-        fill="none"
-        stroke={hov ? color : "transparent"}
-        strokeWidth={2}
-        opacity={0.4}
-        style={{ transition: "stroke 0.2s" }}
-      />
-      {/* Node circle */}
-      <circle
-        cx={x} cy={y} r={r}
-        fill={`${color}18`}
-        stroke={hov ? color : `${color}60`}
-        strokeWidth={isCenter ? 2.5 : 1.5}
-        style={{ transition: "stroke 0.2s, fill 0.2s" }}
-      />
-      {/* Inner accent ring for center */}
-      {isCenter && (
-        <circle cx={x} cy={y} r={r - 6} fill="none" stroke={`${color}30`} strokeWidth={1} />
-      )}
-      {/* Label */}
-      <text
-        x={x} y={y}
-        textAnchor="middle" dominantBaseline="central"
-        fill={T.txt} fontSize={isCenter ? 11 : 10}
-        fontFamily={T.fontMono} fontWeight={isCenter ? 700 : 500}
-      >
-        {truncated}
-      </text>
-      {/* Type label below */}
-      <text
-        x={x} y={y + (isCenter ? 16 : 13)}
-        textAnchor="middle" dominantBaseline="central"
-        fill={color} fontSize={8} fontFamily={T.fontUI} fontWeight={600}
-      >
-        {type}
-      </text>
-    </g>
-  );
-}
+function searchFunctionsByQuery(query, fnMap) {
+  const stopWords = new Set(["how","are","we","the","is","a","an","when","what","where","does","do","in","to","for","of","and","or","this","that","it","be","have","has","was","were","been","being","from","by","with","at","on","can","could","should","would","will","shall"]);
+  const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t));
+  if (tokens.length === 0) return [];
 
-function CallEdge({ x1, y1, x2, y2, color, direction }) {
-  const [hov, setHov] = useState(false);
+  const scores = [];
+  for (const [key, fn] of fnMap) {
+    let score = 0;
+    const nameLower = fn.name.toLowerCase();
+    const fileLower = fn.file.toLowerCase().split("/").pop();
+    const bodyLower = (fn.body || "").slice(0, 500).toLowerCase();
+    const paramNames = (fn.params || []).map(p => p.name.toLowerCase()).join(" ");
 
-  // Curved path from source to target
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist === 0) return null;
+    for (const token of tokens) {
+      if (nameLower.includes(token)) score += 3;
+      if (fileLower.includes(token)) score += 1.5;
+      if (paramNames.includes(token)) score += 2;
+      if (bodyLower.includes(token)) score += 1;
+    }
+    if (score > 0) scores.push({ key, score, fn });
+  }
 
-  // Shorten line by node radius on each end
-  const r1 = direction === "incoming" ? NODE_RADIUS : CENTER_RADIUS;
-  const r2 = direction === "incoming" ? CENTER_RADIUS : NODE_RADIUS;
-  const sx = x1 + (dx / dist) * r1;
-  const sy = y1 + (dy / dist) * r1;
-  const ex = x2 - (dx / dist) * r2;
-  const ey = y2 - (dy / dist) * r2;
-
-  // Control point for curve — increased curvature
-  const midX = (sx + ex) / 2;
-  const midY = (sy + ey) / 2;
-  const curvature = Math.min(60, dist * 0.25);
-  const perpX = -(ey - sy) / dist * curvature;
-  const perpY = (ex - sx) / dist * curvature;
-  const cx = midX + perpX;
-  const cy = midY + perpY;
-
-  // Arrowhead position and angle
-  const arrowT = 0.95;
-  const ax = (1 - arrowT) * (1 - arrowT) * sx + 2 * (1 - arrowT) * arrowT * cx + arrowT * arrowT * ex;
-  const ay = (1 - arrowT) * (1 - arrowT) * sy + 2 * (1 - arrowT) * arrowT * cy + arrowT * arrowT * ey;
-  const tangentX = 2 * (1 - arrowT) * (cx - sx) + 2 * arrowT * (ex - cx);
-  const tangentY = 2 * (1 - arrowT) * (cy - sy) + 2 * arrowT * (ey - cy);
-  const angle = Math.atan2(tangentY, tangentX);
-
-  const arrowSize = 9;
-  const a1x = ax - arrowSize * Math.cos(angle - 0.35);
-  const a1y = ay - arrowSize * Math.sin(angle - 0.35);
-  const a2x = ax - arrowSize * Math.cos(angle + 0.35);
-  const a2y = ay - arrowSize * Math.sin(angle + 0.35);
-
-  const strokeOpacity = hov ? "90" : "50";
-  const strokeW = hov ? 2.5 : 1.5;
-
-  return (
-    <g
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{ cursor: "default" }}
-    >
-      {/* Hover glow shadow */}
-      {hov && (
-        <path
-          d={`M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`}
-          fill="none" stroke={color} strokeWidth={6}
-          opacity={0.15} strokeLinecap="round"
-        />
-      )}
-      <path
-        d={`M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`}
-        fill="none" stroke={`${color}${strokeOpacity}`} strokeWidth={strokeW}
-        strokeDasharray="4 3"
-        style={{ transition: "stroke-width 0.15s, stroke 0.15s" }}
-      />
-      <polygon
-        points={`${ex},${ey} ${a1x},${a1y} ${a2x},${a2y}`}
-        fill={hov ? color : `${color}80`}
-        style={{ transition: "fill 0.15s" }}
-      />
-    </g>
-  );
+  return scores.sort((a, b) => b.score - a.score).slice(0, 20);
 }
 
 // ── ScreenCallGraph ─────────────────────────────────────────────────────────
@@ -317,7 +214,8 @@ function ScreenCallGraph() {
   const [fileTarget, setFileTarget] = useState("__active__"); // "__active__", "__all__", or a file path
   const [error, setError] = useState(null);
   const [fileDropOpen, setFileDropOpen] = useState(false);
-  const svgRef = useRef(null);
+  const [nlQuery, setNlQuery] = useState("");
+  const [nlHighlights, setNlHighlights] = useState(null);
   const dropRef = useRef(null);
   const initialAnalyzeDone = useRef(false);
 
@@ -477,45 +375,63 @@ function ScreenCallGraph() {
     return Array.from(graphData.entries()).map(([key, fn]) => ({ key, ...fn }));
   }, [graphData]);
 
-  // ── SVG layout computation ────────────────────────────────────────────
-  const svgLayout = useMemo(() => {
-    if (!selectedFn) return null;
+  // ── Graph3D data transforms ──────────────────────────────────────────
+  const callGraphNodes = useMemo(() => {
+    if (!graphData) return [];
+    return Array.from(graphData.entries()).map(([key, fn]) => ({
+      id: key,
+      label: fn.name,
+      type: fn.type,
+      color: TYPE_COLORS[fn.type] || T.txt,
+      size: key === selectedKey ? 2.5 : 1.5,
+    }));
+  }, [graphData, selectedKey]);
 
-    const width = 700;
-    const height = 500;
-    const centerX = width / 2;
-    const centerY = height / 2;
+  const callGraphEdges = useMemo(() => {
+    if (!graphData) return [];
+    const edges = [];
+    for (const [key, fn] of graphData) {
+      for (const outKey of fn.outgoingKeys) {
+        if (graphData.has(outKey)) {
+          edges.push({ from: key, to: outKey });
+        }
+      }
+    }
+    return edges;
+  }, [graphData]);
 
-    const inTotal = incomingFns.length;
-    const inTruncated = inTotal > 8;
-    const inNodes = incomingFns.slice(0, 8).map((fn, i, arr) => {
-      const count = arr.length;
-      const spacing = Math.min(55, (height - 80) / Math.max(count, 1));
-      const startY = centerY - ((count - 1) * spacing) / 2;
-      return {
-        x: 90,
-        y: startY + i * spacing,
-        fn,
-        key: fn.key,
-      };
-    });
+  // ── NL Search handler ──────────────────────────────────────────────
+  const handleNLSearch = useCallback(() => {
+    if (!nlQuery.trim() || !sharedFunctionMap || sharedFunctionMap.size === 0) {
+      setNlHighlights(null);
+      return;
+    }
+    setError(null);
+    const matches = searchFunctionsByQuery(nlQuery, sharedFunctionMap);
+    if (matches.length === 0) {
+      setError("No functions matched your query. Try different keywords.");
+      setNlHighlights(null);
+      return;
+    }
 
-    const outTotal = outgoingFns.length;
-    const outTruncated = outTotal > 8;
-    const outNodes = outgoingFns.slice(0, 8).map((fn, i, arr) => {
-      const count = arr.length;
-      const spacing = Math.min(55, (height - 80) / Math.max(count, 1));
-      const startY = centerY - ((count - 1) * spacing) / 2;
-      return {
-        x: width - 90,
-        y: startY + i * spacing,
-        fn,
-        key: fn.key,
-      };
-    });
+    const toInclude = new Set();
+    for (const match of matches) toInclude.add(match.key);
+    // Expand by 1 depth
+    for (const match of matches) {
+      const fn = sharedFunctionMap.get(match.key);
+      if (!fn) continue;
+      for (const k of (fn.outgoingKeys || []).slice(0, 5)) toInclude.add(k);
+      for (const k of (fn.incomingKeys || []).slice(0, 5)) toInclude.add(k);
+    }
+    const subGraph = new Map();
+    for (const key of toInclude) {
+      if (sharedFunctionMap.has(key)) subGraph.set(key, sharedFunctionMap.get(key));
+    }
 
-    return { width, height, centerX, centerY, inNodes, outNodes, inTruncated, inTotal, outTruncated, outTotal };
-  }, [selectedFn, incomingFns, outgoingFns]);
+    setGraphData(subGraph);
+    setSelectedKey(matches[0].key);
+    setNlHighlights(new Set(matches.map(m => m.key)));
+  }, [nlQuery, sharedFunctionMap]);
 
   // ── Click node to re-center ───────────────────────────────────────────
   const handleNodeClick = useCallback((key) => {
@@ -609,8 +525,28 @@ function ScreenCallGraph() {
           ))}
         </div>
 
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
+        {/* NL Search */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <input
+            value={nlQuery}
+            onChange={(e) => setNlQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleNLSearch(); }}
+            placeholder="Ask about your code... e.g. 'token count scraping'"
+            style={{
+              flex: 1, maxWidth: 360, background: T.bg3, border: `1px solid ${T.border2}`,
+              borderRadius: 6, padding: "6px 12px", fontSize: 12, fontFamily: T.fontUI,
+              color: T.txt, outline: "none",
+            }}
+          />
+          <Btn variant="primary" onClick={handleNLSearch} style={{ height: 28, fontSize: 11 }}>
+            Generate
+          </Btn>
+          {nlHighlights && (
+            <Badge style={{ background: `${T.purple}18`, border: `1px solid ${T.purple}40`, color: T.purple, fontSize: 9 }}>
+              NL: {nlHighlights.size} matches
+            </Badge>
+          )}
+        </div>
 
         {/* Function count */}
         {graphData && (
@@ -682,15 +618,15 @@ function ScreenCallGraph() {
                 onClick={() => handleNodeClick(fn.key)}
               />
             ))}
-            {selectedFn && svgLayout && svgLayout.inTruncated && (
+            {selectedFn && incomingFns.length > 8 && (
               <div style={{ padding: "6px 12px", fontSize: 10, color: T.txt3, fontFamily: T.fontUI, fontStyle: "italic", borderTop: `1px solid ${T.border}` }}>
-                Showing 8 of {svgLayout.inTotal} in graph
+                {incomingFns.length} total incoming calls
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Center: SVG call graph ───────────────────────────────────── */}
+        {/* ── Center: 3D Call Graph ──────────────────────────────────── */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {error && (
             <div style={{
@@ -706,8 +642,8 @@ function ScreenCallGraph() {
             </div>
           )}
 
-          <div ref={svgRef} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            {!graphData && !analyzing && !error && (
+          {!graphData && !analyzing && !error && (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={T.txt3} strokeWidth="1">
                   <circle cx="5" cy="12" r="2" />
@@ -726,121 +662,33 @@ function ScreenCallGraph() {
                   Supports .js, .jsx, .ts, .tsx files
                 </span>
               </div>
-            )}
+            </div>
+          )}
 
-            {analyzing && (
+          {analyzing && (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                 <Spinner size={28} color={T.purple} />
                 <span style={{ color: T.txt2, fontSize: 13, fontFamily: T.fontUI }}>
                   Building call graph...
                 </span>
               </div>
-            )}
+            </div>
+          )}
 
-            {graphData && selectedFn && svgLayout && (
-              <svg
-                width={svgLayout.width}
-                height={svgLayout.height}
-                viewBox={`0 0 ${svgLayout.width} ${svgLayout.height}`}
-                style={{ maxWidth: "100%", maxHeight: "100%" }}
-              >
-                {/* Background grid */}
-                <defs>
-                  <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke={`${T.border}30`} strokeWidth="0.5" />
-                  </pattern>
-                </defs>
-                <rect width={svgLayout.width} height={svgLayout.height} fill="url(#grid)" />
-
-                {/* Direction labels */}
-                <text x={60} y={24} textAnchor="middle" fill={T.txt3} fontSize={9} fontFamily={T.fontUI} fontWeight={600}>
-                  CALLERS
-                </text>
-                <text x={svgLayout.width - 60} y={24} textAnchor="middle" fill={T.txt3} fontSize={9} fontFamily={T.fontUI} fontWeight={600}>
-                  CALLEES
-                </text>
-
-                {/* Incoming edges */}
-                {svgLayout.inNodes.map((node) => (
-                  <CallEdge
-                    key={`in-${node.key}`}
-                    x1={node.x} y1={node.y}
-                    x2={svgLayout.centerX} y2={svgLayout.centerY}
-                    color={TYPE_COLORS[node.fn.type] || T.green}
-                    direction="incoming"
-                  />
-                ))}
-
-                {/* Outgoing edges */}
-                {svgLayout.outNodes.map((node) => (
-                  <CallEdge
-                    key={`out-${node.key}`}
-                    x1={svgLayout.centerX} y1={svgLayout.centerY}
-                    x2={node.x} y2={node.y}
-                    color={TYPE_COLORS[node.fn.type] || T.green}
-                    direction="outgoing"
-                  />
-                ))}
-
-                {/* Incoming nodes */}
-                {svgLayout.inNodes.map((node) => (
-                  <CallNode
-                    key={`in-node-${node.key}`}
-                    x={node.x} y={node.y}
-                    label={node.fn.name}
-                    type={node.fn.type}
-                    file={node.fn.file}
-                    isCenter={false}
-                    onClick={() => handleNodeClick(node.key)}
-                  />
-                ))}
-
-                {/* Outgoing nodes */}
-                {svgLayout.outNodes.map((node) => (
-                  <CallNode
-                    key={`out-node-${node.key}`}
-                    x={node.x} y={node.y}
-                    label={node.fn.name}
-                    type={node.fn.type}
-                    file={node.fn.file}
-                    isCenter={false}
-                    onClick={() => handleNodeClick(node.key)}
-                  />
-                ))}
-
-                {/* Center node */}
-                <CallNode
-                  x={svgLayout.centerX} y={svgLayout.centerY}
-                  label={selectedFn.name}
-                  type={selectedFn.type}
-                  file={selectedFn.file}
-                  isCenter={true}
-                  onClick={() => {}}
-                />
-
-                {/* Legend */}
-                {Object.entries(TYPE_COLORS).map(([type, color], i) => (
-                  <g key={type} transform={`translate(12, ${svgLayout.height - 60 + i * 14})`}>
-                    <circle cx={5} cy={0} r={4} fill={`${color}40`} stroke={color} strokeWidth={1} />
-                    <text x={14} y={0} dominantBaseline="central" fill={T.txt3} fontSize={9} fontFamily={T.fontUI}>
-                      {type}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-            )}
-
-            {graphData && !selectedFn && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={T.txt3} strokeWidth="1.5">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-                <span style={{ color: T.txt3, fontSize: 13, fontFamily: T.fontUI }}>
-                  Select a function from the left panel
-                </span>
-              </div>
-            )}
-          </div>
+          {graphData && (
+            <Suspense fallback={<div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: T.txt2, fontFamily: T.fontUI, fontSize: 13 }}>Loading 3D graph...</div>}>
+              <Graph3D
+                nodes={callGraphNodes}
+                edges={callGraphEdges}
+                selectedNode={selectedKey}
+                onNodeClick={handleNodeClick}
+                onNodeHover={() => {}}
+                highlightedNodes={nlHighlights}
+                style={{ flex: 1 }}
+              />
+            </Suspense>
+          )}
         </div>
 
         {/* ── Right panel: Function detail ──────────────────────────────── */}
@@ -973,9 +821,9 @@ function ScreenCallGraph() {
                     onClick={() => handleNodeClick(fn.key)}
                   />
                 ))}
-                {svgLayout && svgLayout.outTruncated && (
+                {outgoingFns.length > 8 && (
                   <div style={{ padding: "6px 12px", fontSize: 10, color: T.txt3, fontFamily: T.fontUI, fontStyle: "italic", borderTop: `1px solid ${T.border}` }}>
-                    Showing 8 of {svgLayout.outTotal} in graph
+                    {outgoingFns.length} total outgoing calls
                   </div>
                 )}
               </div>

@@ -91,10 +91,19 @@ function NavRow({ icon, label, sub, active, accentColor, indent, onClick }) {
 
 // ── Left Nav ──────────────────────────────────────────────────────────────────
 function LeftNav({ screen, onNavigate, prData, historyCount, connections, collapsed, onToggle }) {
-  // Whether the Sharingan sub-tree is open (only visible when nav is expanded)
-  const [sharinganOpen, setSharinganOpen] = useState(true);
-  const [kawaiiOpen, setKawaiiOpen] = useState(true);
-  const [shinraOpen, setShinraOpen] = useState(true);
+  // Whether each sub-tree is open — persisted to localStorage
+  const [sharinganOpen, setSharinganOpen] = useState(() => {
+    try { const v = localStorage.getItem("akatsuki:nav-sharingan-open"); return v !== null ? v === "true" : true; } catch { return true; }
+  });
+  const [kawaiiOpen, setKawaiiOpen] = useState(() => {
+    try { const v = localStorage.getItem("akatsuki:nav-kawaii-open"); return v !== null ? v === "true" : true; } catch { return true; }
+  });
+  const [shinraOpen, setShinraOpen] = useState(() => {
+    try { const v = localStorage.getItem("akatsuki:nav-shinra-open"); return v !== null ? v === "true" : true; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem("akatsuki:nav-sharingan-open", String(sharinganOpen)); } catch {} }, [sharinganOpen]);
+  useEffect(() => { try { localStorage.setItem("akatsuki:nav-kawaii-open", String(kawaiiOpen)); } catch {} }, [kawaiiOpen]);
+  useEffect(() => { try { localStorage.setItem("akatsuki:nav-shinra-open", String(shinraOpen)); } catch {} }, [shinraOpen]);
 
   const isSharing     = screen === "review" || screen === "history" || screen === "connectors";
   const isHistory     = screen === "history";
