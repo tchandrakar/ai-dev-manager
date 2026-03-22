@@ -584,7 +584,7 @@ function ShinraApp({ initialTab, onNavigate }) {
     if (!workingDir) return;
     window.akatsuki.shinra.watchStart({
       dir: workingDir,
-      extensions: ["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "go", "rs"],
+      extensions: ["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "go", "rs", "dart"],
     });
     const handler = (data) => {
       if (data && data.paths) index.invalidateFiles(data.paths);
@@ -679,6 +679,8 @@ function ShinraApp({ initialTab, onNavigate }) {
       indexFileSet: index.fileSet,
       importGraph: index.importGraph,
       functionMap: index.functionMap,
+      symbolIndex: index.symbolIndex,
+      routeIndex: index.routeIndex,
       fullScan: index.fullScan,
       invalidateFile: index.invalidateFile,
       invalidateFiles: index.invalidateFiles,
@@ -695,6 +697,7 @@ function ShinraApp({ initialTab, onNavigate }) {
       aiHistory,
       index.status, index.progress, index.error, index.repoType,
       index.fileList, index.fileSet, index.importGraph, index.functionMap,
+      index.symbolIndex, index.routeIndex,
       index.fullScan, index.invalidateFile, index.invalidateFiles,
     ]
   );

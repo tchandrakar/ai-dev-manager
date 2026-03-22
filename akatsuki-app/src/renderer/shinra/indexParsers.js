@@ -9,11 +9,11 @@ export const IGNORED_DIRS = new Set([
 ]);
 
 export const DEPENDENCY_EXTENSIONS = new Set([
-  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "go", "rs",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "go", "rs", "dart",
 ]);
 
 export const CALLGRAPH_EXTENSIONS = new Set([
-  "js", "jsx", "ts", "tsx", "mjs", "cjs",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "go", "dart",
 ]);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,6 +55,11 @@ export function extractImports(source, filePath) {
     while ((m = useRe.exec(source)) !== null) paths.push(m[1].split("::").slice(0, 2).join("::"));
     const modRe = /^\s*mod\s+([a-zA-Z0-9_]+)\s*;/gm;
     while ((m = modRe.exec(source)) !== null) paths.push(m[1]);
+  } else if (ext === ".dart") {
+    const dartImport = /^\s*import\s+['"]([^'"]+)['"]/gm;
+    while ((m = dartImport.exec(source)) !== null) paths.push(m[1]);
+    const dartExport = /^\s*export\s+['"]([^'"]+)['"]/gm;
+    while ((m = dartExport.exec(source)) !== null) paths.push(m[1]);
   } else {
     const importRe = /import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
     while ((m = importRe.exec(source)) !== null) paths.push(m[1]);
@@ -115,6 +120,32 @@ export function resolveImportPath(importPath, currentFile, fileSet, workDir) {
     return null;
   }
 
+  // Dart
+  if (ext === ".dart") {
+    if (importPath.startsWith("./") || importPath.startsWith("../")) {
+      const dir = currentFile.substring(0, currentFile.lastIndexOf("/"));
+      const parts = (dir + "/" + importPath).split("/");
+      const resolved = [];
+      for (const p of parts) {
+        if (p === "" || p === ".") continue;
+        if (p === "..") { resolved.pop(); continue; }
+        resolved.push(p);
+      }
+      const base = "/" + resolved.join("/");
+      if (fileSet.has(base)) return base;
+      if (fileSet.has(base + ".dart")) return base + ".dart";
+      return null;
+    }
+    if (importPath.startsWith("package:")) {
+      const tail = importPath.replace(/^package:[^/]+\//, "");
+      for (const fp of fileSet) {
+        if (fp.endsWith("/" + tail) || fp.endsWith("/" + tail + ".dart")) return fp;
+      }
+      return null;
+    }
+    return null;
+  }
+
   // JS/TS: skip bare specifiers
   if (!importPath.startsWith(".") && !importPath.startsWith("/")) return null;
 
@@ -138,9 +169,18 @@ export function resolveImportPath(importPath, currentFile, fileSet, workDir) {
   return null;
 }
 
-// ── Function parsing (JS/TS only) ────────────────────────────────────────────
+// ── Function parsing ─────────────────────────────────────────────────────────
 
 export function parseFile(content, filePath) {
+  // Dispatch to language-specific parser based on file extension
+  if (filePath.endsWith(".go")) return parseFileGo(content, filePath);
+  if (filePath.endsWith(".dart")) return parseFileDart(content, filePath);
+  return parseFileJS(content, filePath);
+}
+
+// ── JS/TS parser ─────────────────────────────────────────────────────────────
+
+function parseFileJS(content, filePath) {
   const lines = content.split("\n");
   const functions = [];
 
@@ -222,6 +262,294 @@ export function parseFile(content, filePath) {
   return functions;
 }
 
+// ── Go parser ────────────────────────────────────────────────────────────────
+
+function parseGoParams(paramStr) {
+  if (!paramStr || !paramStr.trim()) return [];
+  return paramStr.split(",").map((p) => {
+    const trimmed = p.trim();
+    if (!trimmed) return null;
+    // "name Type" or just "Type"
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 2) {
+      return { name: parts[0], type: parts.slice(1).join(" ") };
+    }
+    return { name: parts[0], type: "any" };
+  }).filter(Boolean);
+}
+
+function parseFileGo(content, filePath) {
+  const lines = content.split("\n");
+  const functions = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith("//")) continue;
+
+    let fnName = null;
+    let params = [];
+    let returnType = "void";
+    let isExported = false;
+    let isMethod = false;
+
+    // func (r *Type) MethodName(params) returnType {
+    let match = trimmed.match(/^func\s+\([^)]*\)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(.*)/);
+    if (match) {
+      fnName = match[1];
+      params = parseGoParams(match[2]);
+      isMethod = true;
+      const rest = match[3];
+      // Extract return type: "(Type, error) {" or "Type {"
+      const multiReturn = rest.match(/^\(([^)]+)\)\s*\{/);
+      if (multiReturn) returnType = "(" + multiReturn[1] + ")";
+      else {
+        const singleReturn = rest.match(/^([a-zA-Z_*[\]{}.<>]+)\s*\{/);
+        if (singleReturn) returnType = singleReturn[1];
+      }
+    }
+
+    // func FuncName(params) returnType {
+    if (!fnName) {
+      match = trimmed.match(/^func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(.*)/);
+      if (match) {
+        fnName = match[1];
+        params = parseGoParams(match[2]);
+        const rest = match[3];
+        const multiReturn = rest.match(/^\(([^)]+)\)\s*\{/);
+        if (multiReturn) returnType = "(" + multiReturn[1] + ")";
+        else {
+          const singleReturn = rest.match(/^([a-zA-Z_*[\]{}.<>]+)\s*\{/);
+          if (singleReturn) returnType = singleReturn[1];
+        }
+      }
+    }
+
+    // type TypeName struct {
+    if (!fnName) {
+      match = trimmed.match(/^type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+struct\s*\{/);
+      if (match) {
+        fnName = match[1];
+        params = [];
+        returnType = "struct";
+      }
+    }
+
+    // type TypeName interface {
+    if (!fnName) {
+      match = trimmed.match(/^type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+interface\s*\{/);
+      if (match) {
+        fnName = match[1];
+        params = [];
+        returnType = "interface";
+      }
+    }
+
+    if (!fnName) continue;
+
+    isExported = /^[A-Z]/.test(fnName);
+
+    // Track braces for body extraction
+    const startLine = i;
+    let braceCount = 0;
+    let bodyStarted = false;
+    let endLine = i;
+
+    for (let j = i; j < lines.length; j++) {
+      const l = lines[j];
+      for (let k = 0; k < l.length; k++) {
+        if (l[k] === "{") { braceCount++; bodyStarted = true; }
+        else if (l[k] === "}") { braceCount--; }
+      }
+      if (bodyStarted && braceCount <= 0) { endLine = j; break; }
+      if (j === lines.length - 1) endLine = j;
+    }
+
+    const body = lines.slice(startLine, endLine + 1).join("\n");
+    const calls = extractCalls(body, fnName);
+    const isAsync = /\bgo\s+/.test(body);
+
+    let fnType = isExported ? "export" : "internal";
+
+    functions.push({
+      name: fnName, file: filePath,
+      startLine: startLine + 1, endLine: endLine + 1,
+      params, returnType, type: fnType,
+      isAsync, isExported, calls, body,
+    });
+  }
+
+  return functions;
+}
+
+// ── Dart parser ──────────────────────────────────────────────────────────────
+
+function parseDartParams(paramStr) {
+  if (!paramStr || !paramStr.trim()) return [];
+  // Strip outer braces for named params: {required Type name, Type name2}
+  let str = paramStr.trim();
+  if (str.startsWith("{")) str = str.slice(1);
+  if (str.endsWith("}")) str = str.slice(0, -1);
+  if (str.startsWith("[")) str = str.slice(1);
+  if (str.endsWith("]")) str = str.slice(0, -1);
+
+  return str.split(",").map((p) => {
+    let trimmed = p.trim();
+    if (!trimmed) return null;
+    // Remove "required" keyword
+    trimmed = trimmed.replace(/^required\s+/, "");
+    // "Type name" or "Type? name" or "Type name = default"
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 2) {
+      // Last token is the name, everything before is the type
+      const name = parts[parts.length - 1].replace(/=.*$/, "").trim();
+      const type = parts.slice(0, parts.length - 1).join(" ");
+      return { name, type };
+    }
+    return { name: parts[0], type: "dynamic" };
+  }).filter(Boolean);
+}
+
+function parseFileDart(content, filePath) {
+  const lines = content.split("\n");
+  const functions = [];
+  let inClass = false;
+  let classDepth = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+
+    let fnName = null;
+    let params = [];
+    let returnType = "void";
+    let isExported = false;
+    let isAsync = false;
+    let isStatic = false;
+    let isOverride = false;
+
+    // Check for @override on previous line
+    if (i > 0 && lines[i - 1].trim() === "@override") isOverride = true;
+
+    // class ClassName extends/implements/with ... {
+    let match = trimmed.match(/^(?:abstract\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+    if (match) {
+      fnName = match[1];
+      params = [];
+      returnType = "class";
+      isExported = !fnName.startsWith("_");
+
+      const startLine = i;
+      let braceCount = 0;
+      let bodyStarted = false;
+      let endLine = i;
+      for (let j = i; j < lines.length; j++) {
+        const l = lines[j];
+        for (let k = 0; k < l.length; k++) {
+          if (l[k] === "{") { braceCount++; bodyStarted = true; }
+          else if (l[k] === "}") { braceCount--; }
+        }
+        if (bodyStarted && braceCount <= 0) { endLine = j; break; }
+        if (j === lines.length - 1) endLine = j;
+      }
+
+      const body = lines.slice(startLine, endLine + 1).join("\n");
+      const calls = extractCalls(body, fnName);
+
+      functions.push({
+        name: fnName, file: filePath,
+        startLine: startLine + 1, endLine: endLine + 1,
+        params, returnType, type: isExported ? "export" : "internal",
+        isAsync: false, isExported, calls, body,
+      });
+      continue;
+    }
+
+    // Handle static keyword
+    let lineToCheck = trimmed;
+    if (lineToCheck.startsWith("static ")) {
+      isStatic = true;
+      lineToCheck = lineToCheck.replace(/^static\s+/, "");
+    }
+
+    // Future<Type> funcName(params) async {
+    match = lineToCheck.match(/^(Future\s*<[^>]+>)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(async\s*)?\{/);
+    if (match) {
+      returnType = match[1];
+      fnName = match[2];
+      params = parseDartParams(match[3]);
+      isAsync = true;
+    }
+
+    // ReturnType funcName(params) { or ReturnType funcName(params) async {
+    if (!fnName) {
+      match = lineToCheck.match(/^([A-Za-z_][A-Za-z0-9_<>?]*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(async\s*)?\{/);
+      if (match && !["if", "for", "while", "switch", "catch", "else", "return", "new", "class"].includes(match[2])) {
+        returnType = match[1];
+        fnName = match[2];
+        params = parseDartParams(match[3]);
+        isAsync = !!match[4];
+      }
+    }
+
+    // void/dynamic funcName(params) { — explicit void/dynamic return
+    if (!fnName) {
+      match = lineToCheck.match(/^(void|dynamic)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(async\s*)?\{/);
+      if (match) {
+        returnType = match[1];
+        fnName = match[2];
+        params = parseDartParams(match[3]);
+        isAsync = !!match[4];
+      }
+    }
+
+    // funcName(params) { — no return type (constructors, etc.)
+    if (!fnName) {
+      match = lineToCheck.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(async\s*)?\{/);
+      if (match && !["if", "for", "while", "switch", "catch", "else", "return", "new", "class", "import", "export"].includes(match[1])) {
+        fnName = match[1];
+        params = parseDartParams(match[2]);
+        returnType = "dynamic";
+        isAsync = !!match[3];
+      }
+    }
+
+    if (!fnName) continue;
+
+    // In Dart, names starting with _ are private (not exported)
+    isExported = !fnName.startsWith("_");
+
+    // Track braces for body extraction
+    const startLine = i;
+    let braceCount = 0;
+    let bodyStarted = false;
+    let endLine = i;
+
+    for (let j = i; j < lines.length; j++) {
+      const l = lines[j];
+      for (let k = 0; k < l.length; k++) {
+        if (l[k] === "{") { braceCount++; bodyStarted = true; }
+        else if (l[k] === "}") { braceCount--; }
+      }
+      if (bodyStarted && braceCount <= 0) { endLine = j; break; }
+      if (j === lines.length - 1) endLine = j;
+    }
+
+    const body = lines.slice(startLine, endLine + 1).join("\n");
+    const calls = extractCalls(body, fnName);
+
+    let fnType = isExported ? "export" : "internal";
+
+    functions.push({
+      name: fnName, file: filePath,
+      startLine: startLine + 1, endLine: endLine + 1,
+      params, returnType, type: fnType,
+      isAsync, isExported, calls, body,
+    });
+  }
+
+  return functions;
+}
+
 export function parseParams(paramStr) {
   if (!paramStr || !paramStr.trim()) return [];
   return paramStr.split(",").map((p) => {
@@ -260,6 +588,16 @@ export function extractCalls(body, selfName) {
     "clearInterval", "parseInt", "parseFloat", "JSON", "Object", "Array",
     "String", "Number", "Boolean", "Math", "Date", "Promise", "RegExp",
     "Error", "Map", "Set", "Symbol", "Proxy", "Reflect",
+    // Go built-ins
+    "fmt", "log", "errors", "strings", "strconv", "context", "sync", "time",
+    "http", "json", "os", "io", "bufio", "bytes", "make", "append", "len",
+    "cap", "panic", "recover", "close", "copy", "range", "defer", "go",
+    "select", "chan",
+    // Dart built-ins
+    "print", "debugPrint", "setState", "initState", "dispose", "build",
+    "super", "Widget", "BuildContext", "Navigator", "MaterialApp", "Scaffold",
+    "Container", "Column", "Row", "Text", "Center", "Padding", "SizedBox",
+    "ListView",
   ]);
   while ((m = callRegex.exec(body)) !== null) {
     if (!skip.has(m[1])) calls.add(m[1]);

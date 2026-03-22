@@ -119,6 +119,8 @@ export default function useRepositoryIndex(workingDir) {
   const [fileSet, setFileSet] = useState(new Set());
   const [importGraph, setImportGraph] = useState(null);
   const [functionMap, setFunctionMap] = useState(null);
+  const [symbolIndex, setSymbolIndex] = useState(null);
+  const [routeIndex, setRouteIndex] = useState(null);
   const [repoType, setRepoType] = useState(null);
 
   // Internal refs
@@ -169,6 +171,54 @@ export default function useRepositoryIndex(workingDir) {
       const fm = buildFunctionIndex(contents);
       if (scanId !== scanIdRef.current) return;
       setFunctionMap(fm);
+
+      // Phase 5: Build symbol index
+      const symbolIdx = new Map();
+      for (const [key, fn] of fm) {
+        if (!symbolIdx.has(fn.name)) symbolIdx.set(fn.name, []);
+        symbolIdx.get(fn.name).push({ file: fn.file, line: fn.startLine, name: fn.name, type: fn.type, key });
+      }
+      setSymbolIndex(symbolIdx);
+
+      // Phase 6: Build route index for cross-language API navigation
+      const routeIdx = new Map();
+      for (const [key, fn] of fm) {
+        const body = fn.body || "";
+        // Go Chi routes: r.Get("/api/...", handler), r.Post, r.Put, r.Delete, r.Route
+        const goRoutes = /\b(?:r|router|mux)\.(Get|Post|Put|Delete|Patch|Route)\s*\(\s*["'`]([^"'`]+)["'`]/g;
+        let rm;
+        while ((rm = goRoutes.exec(body)) !== null) {
+          const method = rm[1].toUpperCase();
+          const path = rm[2].replace(/\{[^}]+\}/g, "{id}").replace(/:[a-zA-Z]+/g, "{id}");
+          if (!routeIdx.has(path)) routeIdx.set(path, []);
+          routeIdx.get(path).push({ file: fn.file, line: fn.startLine, method, handler: fn.name, type: "handler" });
+        }
+        // Go http.HandleFunc
+        const goHttp = /http\.HandleFunc\s*\(\s*["'`]([^"'`]+)["'`]/g;
+        while ((rm = goHttp.exec(body)) !== null) {
+          const path = rm[1];
+          if (!routeIdx.has(path)) routeIdx.set(path, []);
+          routeIdx.get(path).push({ file: fn.file, line: fn.startLine, method: "ANY", handler: fn.name, type: "handler" });
+        }
+        // TS/JS: fetch("/api/..."), axios.get("/api/...")
+        const tsFetch = /(?:fetch|axios\.(?:get|post|put|delete|patch)|apiClient\.(?:get|post|put|delete|patch))\s*\(\s*[`"']([^`"']+)[`"']/g;
+        while ((rm = tsFetch.exec(body)) !== null) {
+          const path = rm[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "");
+          if (!path.startsWith("/") && !path.startsWith("http")) continue;
+          const normalized = path.replace(/^https?:\/\/[^/]+/, "");
+          if (!routeIdx.has(normalized)) routeIdx.set(normalized, []);
+          routeIdx.get(normalized).push({ file: fn.file, line: fn.startLine, method: "CALL", handler: fn.name, type: "caller" });
+        }
+        // Dart: Dio().get("/api/..."), http.get(Uri.parse("/api/..."))
+        const dartHttp = /(?:dio\.(?:get|post|put|delete|patch)|http\.(?:get|post|put|delete))\s*\(\s*(?:Uri\.parse\s*\()?\s*['"]([^'"]+)['"]/gi;
+        while ((rm = dartHttp.exec(body)) !== null) {
+          const path = rm[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "");
+          const normalized = path.replace(/^https?:\/\/[^/]+/, "");
+          if (!routeIdx.has(normalized)) routeIdx.set(normalized, []);
+          routeIdx.get(normalized).push({ file: fn.file, line: fn.startLine, method: "CALL", handler: fn.name, type: "caller" });
+        }
+      }
+      setRouteIndex(routeIdx);
 
       setStatus("ready");
       setProgress({ scanned: files.length, total: files.length, phase: "done" });
@@ -225,6 +275,50 @@ export default function useRepositoryIndex(workingDir) {
       // Rebuild function map (full rebuild is fast since we have cached contents)
       const fm = buildFunctionIndex(fileContentsRef.current);
       setFunctionMap(fm);
+
+      // Rebuild symbol index
+      const symbolIdx = new Map();
+      for (const [key, fn] of fm) {
+        if (!symbolIdx.has(fn.name)) symbolIdx.set(fn.name, []);
+        symbolIdx.get(fn.name).push({ file: fn.file, line: fn.startLine, name: fn.name, type: fn.type, key });
+      }
+      setSymbolIndex(symbolIdx);
+
+      // Rebuild route index
+      const routeIdx = new Map();
+      for (const [key, fn] of fm) {
+        const body = fn.body || "";
+        const goRoutes = /\b(?:r|router|mux)\.(Get|Post|Put|Delete|Patch|Route)\s*\(\s*["'`]([^"'`]+)["'`]/g;
+        let rm;
+        while ((rm = goRoutes.exec(body)) !== null) {
+          const method = rm[1].toUpperCase();
+          const path = rm[2].replace(/\{[^}]+\}/g, "{id}").replace(/:[a-zA-Z]+/g, "{id}");
+          if (!routeIdx.has(path)) routeIdx.set(path, []);
+          routeIdx.get(path).push({ file: fn.file, line: fn.startLine, method, handler: fn.name, type: "handler" });
+        }
+        const goHttp = /http\.HandleFunc\s*\(\s*["'`]([^"'`]+)["'`]/g;
+        while ((rm = goHttp.exec(body)) !== null) {
+          const path = rm[1];
+          if (!routeIdx.has(path)) routeIdx.set(path, []);
+          routeIdx.get(path).push({ file: fn.file, line: fn.startLine, method: "ANY", handler: fn.name, type: "handler" });
+        }
+        const tsFetch = /(?:fetch|axios\.(?:get|post|put|delete|patch)|apiClient\.(?:get|post|put|delete|patch))\s*\(\s*[`"']([^`"']+)[`"']/g;
+        while ((rm = tsFetch.exec(body)) !== null) {
+          const path = rm[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "");
+          if (!path.startsWith("/") && !path.startsWith("http")) continue;
+          const normalized = path.replace(/^https?:\/\/[^/]+/, "");
+          if (!routeIdx.has(normalized)) routeIdx.set(normalized, []);
+          routeIdx.get(normalized).push({ file: fn.file, line: fn.startLine, method: "CALL", handler: fn.name, type: "caller" });
+        }
+        const dartHttp = /(?:dio\.(?:get|post|put|delete|patch)|http\.(?:get|post|put|delete))\s*\(\s*(?:Uri\.parse\s*\()?\s*['"]([^'"]+)['"]/gi;
+        while ((rm = dartHttp.exec(body)) !== null) {
+          const path = rm[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "");
+          const normalized = path.replace(/^https?:\/\/[^/]+/, "");
+          if (!routeIdx.has(normalized)) routeIdx.set(normalized, []);
+          routeIdx.get(normalized).push({ file: fn.file, line: fn.startLine, method: "CALL", handler: fn.name, type: "caller" });
+        }
+      }
+      setRouteIndex(routeIdx);
     } catch {}
   }, [status, workingDir, fileSet]);
 
@@ -243,6 +337,8 @@ export default function useRepositoryIndex(workingDir) {
       setFileSet(new Set());
       setImportGraph(null);
       setFunctionMap(null);
+      setSymbolIndex(null);
+      setRouteIndex(null);
       setRepoType(null);
       return;
     }
@@ -260,6 +356,8 @@ export default function useRepositoryIndex(workingDir) {
     fileSet,
     importGraph,
     functionMap,
+    symbolIndex,
+    routeIndex,
     repoType,
     fullScan,
     invalidateFile,
