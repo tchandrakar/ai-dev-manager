@@ -792,6 +792,14 @@ function ScreenEditor() {
   // Markdown preview mode
   const [mdPreviewMode, setMdPreviewMode] = useState("code"); // "code" | "split" | "preview"
 
+  // ── Active file extension (needed early for keyboard shortcuts) ──────────
+  const activeExt = useMemo(() => {
+    if (!activeFile) return "ts";
+    const parts = activeFile.split(".");
+    return parts.length > 1 ? parts.pop().toLowerCase() : "ts";
+  }, [activeFile]);
+  const isMarkdown = activeExt === "md";
+
   // ── Load tree when workingDir changes ─────────────────────────────────────
   useEffect(() => {
     if (!workingDir) {
@@ -1298,12 +1306,6 @@ function ScreenEditor() {
   // ── Derived values ────────────────────────────────────────────────────────
   const activeContent = activeFile && fileContents[activeFile] ? fileContents[activeFile].content : "";
   const activeModified = activeFile && fileContents[activeFile] ? fileContents[activeFile].modified : false;
-  const activeExt = useMemo(() => {
-    if (!activeFile) return "ts";
-    const parts = activeFile.split(".");
-    return parts.length > 1 ? parts.pop().toLowerCase() : "ts";
-  }, [activeFile]);
-  const isMarkdown = activeExt === "md";
   const lines = useMemo(() => activeContent.split("\n"), [activeContent]);
   const gutterWidth = useMemo(() => Math.max(String(lines.length).length * 9 + 16, 40), [lines.length]);
   const visibleLines = Math.floor(editorHeight / 20);
