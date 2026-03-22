@@ -722,6 +722,27 @@ function MarkdownPreview({ content }) {
   );
 }
 
+// ── DefPopupItem (extracted to avoid hooks-in-map) ───────────────────────
+function DefPopupItem({ m, onNavigate }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onClick={() => onNavigate(m)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding: "4px 8px", cursor: "pointer", borderRadius: 4,
+        display: "flex", alignItems: "center", gap: 8,
+        background: hov ? T.bg3 : "transparent",
+      }}
+    >
+      <span style={{ fontSize: 11, color: T.blue, fontWeight: 600, fontFamily: T.fontMono }}>{m.name}</span>
+      <span style={{ fontSize: 10, color: T.txt3 }}>{m.file.split("/").pop()}:{m.line}</span>
+      <span style={{ fontSize: 9, color: T.purple, marginLeft: "auto" }}>{m.type}</span>
+    </div>
+  );
+}
+
 // ── Main ScreenEditor ───────────────────────────────────────────────────────
 function ScreenEditor() {
   const {
@@ -730,6 +751,7 @@ function ScreenEditor() {
     activeFile, setActiveFile,
     filePaletteOpen, setFilePaletteOpen,
     invalidateFile,
+    symbolIndex, routeIndex,
   } = useShinra();
 
   // File tree state
@@ -751,6 +773,9 @@ function ScreenEditor() {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+
+  // Go-to-definition popup
+  const [defPopup, setDefPopup] = useState(null); // { x, y, matches: [{file, line, name, type}] }
 
   // Editor scroll state
   const editorRef = useRef(null);
@@ -920,6 +945,82 @@ function ScreenEditor() {
     }, 0);
   }, []);
 
+  // ── Cmd+Click go-to-definition ──────────────────────────────────────────
+  const getLineAtClick = useCallback((e) => {
+    const el = editorRef.current;
+    if (!el) return 1;
+    const rect = el.getBoundingClientRect();
+    const y = e.clientY - rect.top + el.scrollTop;
+    return Math.floor(y / 20) + 1;
+  }, []);
+
+  const handleCodeClick = useCallback((e) => {
+    // Only on Cmd+Click (Mac) or Ctrl+Click (non-Mac)
+    if (!(e.metaKey || e.ctrlKey)) {
+      setDefPopup(null);
+      return;
+    }
+
+    // Get clicked word from the DOM
+    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (!range) return;
+
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) return;
+    const text = node.textContent || "";
+    const offset = range.startOffset;
+
+    // Extract word at click position
+    let start = offset;
+    let end = offset;
+    while (start > 0 && /[a-zA-Z0-9_$]/.test(text[start - 1])) start--;
+    while (end < text.length && /[a-zA-Z0-9_$]/.test(text[end])) end++;
+    const word = text.slice(start, end);
+
+    if (!word || word.length < 2) return;
+
+    // Check if it's an API path string (quoted string containing /api/)
+    const fullLine = node.parentElement?.closest("[style]")?.textContent || "";
+    const apiPathMatch = fullLine.match(/['"`]([^'"`]*\/api\/[^'"`]*)['"`]/);
+
+    let matches = [];
+
+    if (apiPathMatch && routeIndex) {
+      // Cross-language: look up API path
+      const apiPath = apiPathMatch[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "").replace(/^https?:\/\/[^/]+/, "");
+      const routeMatches = routeIndex.get(apiPath) || [];
+      matches = routeMatches.map(r => ({
+        file: r.file, line: r.line, name: `${r.method} ${r.handler}`,
+        type: r.type === "handler" ? "API Handler" : "API Caller",
+      }));
+    }
+
+    if (matches.length === 0 && symbolIndex) {
+      // Same-language: look up symbol name
+      const symbolMatches = symbolIndex.get(word) || [];
+      // Filter out the current file+line to avoid self-navigation
+      matches = symbolMatches.filter(s => !(s.file === activeFile && Math.abs(s.line - getLineAtClick(e)) < 3));
+    }
+
+    if (matches.length === 0) return;
+
+    if (matches.length === 1) {
+      // Direct navigation
+      const m = matches[0];
+      setOpenFiles(prev => prev.includes(m.file) ? prev : [...prev, m.file]);
+      setActiveFile(m.file);
+      setDefPopup(null);
+    } else {
+      // Show popup with options
+      const rect = editorRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+      setDefPopup({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        matches,
+      });
+    }
+  }, [symbolIndex, routeIndex, activeFile, setOpenFiles, setActiveFile, getLineAtClick]);
+
   // ── Save file (Cmd+S) ────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!activeFile || !fileContents[activeFile]) return;
@@ -946,6 +1047,12 @@ function ScreenEditor() {
   useEffect(() => {
     const handler = (e) => {
       const mod = e.metaKey || e.ctrlKey;
+
+      // Escape — close go-to-definition popup
+      if (e.key === "Escape" && defPopup) {
+        setDefPopup(null);
+        return;
+      }
 
       // ⌘S — save
       if (mod && e.key === "s" && !e.shiftKey) {
@@ -995,7 +1102,7 @@ function ScreenEditor() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSave, handleCloseTab, activeFile, openFiles, setActiveFile, isMarkdown]);
+  }, [handleSave, handleCloseTab, activeFile, openFiles, setActiveFile, isMarkdown, defPopup]);
 
   // ── File palette (⌘P): focus input when triggered ─────────────────────────
   const fileSearchRef = useRef(null);
@@ -1022,7 +1129,7 @@ function ScreenEditor() {
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
-    const onScroll = () => setScrollTop(el.scrollTop);
+    const onScroll = () => { setScrollTop(el.scrollTop); setDefPopup(null); };
     const onResize = () => setEditorHeight(el.clientHeight);
     el.addEventListener("scroll", onScroll, { passive: true });
     const ro = new ResizeObserver(() => onResize());
@@ -1500,6 +1607,7 @@ function ScreenEditor() {
                 ) : (
                   <div
                     ref={editorRef}
+                    onClick={handleCodeClick}
                     style={{
                       position: "absolute",
                       top: findOpen ? 60 : 28,
@@ -1560,6 +1668,36 @@ function ScreenEditor() {
                         wordSpacing: "normal",
                       }}
                     />
+
+                    {/* Go-to-definition popup */}
+                    {defPopup && (
+                      <div style={{
+                        position: "absolute",
+                        left: defPopup.x,
+                        top: defPopup.y,
+                        zIndex: 100,
+                        background: T.bg2,
+                        border: `1px solid ${T.border}`,
+                        borderRadius: 6,
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                        padding: 4,
+                        minWidth: 280,
+                        maxHeight: 200,
+                        overflowY: "auto",
+                        fontFamily: T.fontUI,
+                      }}>
+                        <div style={{ padding: "4px 8px", fontSize: 10, color: T.txt3, borderBottom: `1px solid ${T.border}`, marginBottom: 4 }}>
+                          Go to Definition — {defPopup.matches.length} match{defPopup.matches.length !== 1 ? "es" : ""}
+                        </div>
+                        {defPopup.matches.map((m, i) => (
+                          <DefPopupItem key={i} m={m} onNavigate={(m) => {
+                            setOpenFiles(prev => prev.includes(m.file) ? prev : [...prev, m.file]);
+                            setActiveFile(m.file);
+                            setDefPopup(null);
+                          }} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
