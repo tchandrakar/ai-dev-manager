@@ -355,6 +355,373 @@ function Minimap({ lines, scrollTop, visibleLines, totalHeight, onSeek }) {
   );
 }
 
+// ── Markdown Preview helpers ─────────────────────────────────────────────────
+function renderInline(text) {
+  if (!text) return text;
+  const parts = [];
+  let remaining = text;
+  let safetyCounter = 0;
+
+  while (remaining.length > 0 && safetyCounter < 500) {
+    safetyCounter++;
+
+    // Image: ![alt](url)
+    const imgMatch = remaining.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    if (imgMatch) {
+      parts.push(
+        <img
+          key={parts.length}
+          src={imgMatch[2]}
+          alt={imgMatch[1]}
+          style={{ maxWidth: "100%", borderRadius: 6 }}
+        />
+      );
+      remaining = remaining.slice(imgMatch[0].length);
+      continue;
+    }
+
+    // Link: [text](url)
+    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+    if (linkMatch) {
+      parts.push(
+        <a key={parts.length} href={linkMatch[2]} style={{ color: T.blue, textDecoration: "underline" }} target="_blank" rel="noopener noreferrer">
+          {linkMatch[1]}
+        </a>
+      );
+      remaining = remaining.slice(linkMatch[0].length);
+      continue;
+    }
+
+    // Bold: **text**
+    const boldMatch = remaining.match(/^\*\*(.+?)\*\*/);
+    if (boldMatch) {
+      parts.push(<span key={parts.length} style={{ fontWeight: 700 }}>{renderInline(boldMatch[1])}</span>);
+      remaining = remaining.slice(boldMatch[0].length);
+      continue;
+    }
+
+    // Bold: __text__
+    const boldMatch2 = remaining.match(/^__(.+?)__/);
+    if (boldMatch2) {
+      parts.push(<span key={parts.length} style={{ fontWeight: 700 }}>{renderInline(boldMatch2[1])}</span>);
+      remaining = remaining.slice(boldMatch2[0].length);
+      continue;
+    }
+
+    // Italic: *text* or _text_
+    const italicMatch = remaining.match(/^\*([^*]+)\*/) || remaining.match(/^_([^_]+)_/);
+    if (italicMatch) {
+      parts.push(<span key={parts.length} style={{ fontStyle: "italic" }}>{renderInline(italicMatch[1])}</span>);
+      remaining = remaining.slice(italicMatch[0].length);
+      continue;
+    }
+
+    // Inline code: `code`
+    const codeMatch = remaining.match(/^`([^`]+)`/);
+    if (codeMatch) {
+      parts.push(
+        <code key={parts.length} style={{
+          background: T.bg3, color: T.green, fontFamily: T.fontMono,
+          padding: "2px 6px", borderRadius: 3, fontSize: 12,
+        }}>
+          {codeMatch[1]}
+        </code>
+      );
+      remaining = remaining.slice(codeMatch[0].length);
+      continue;
+    }
+
+    // Strikethrough: ~~text~~
+    const strikeMatch = remaining.match(/^~~(.+?)~~/);
+    if (strikeMatch) {
+      parts.push(<span key={parts.length} style={{ textDecoration: "line-through", color: T.txt3 }}>{renderInline(strikeMatch[1])}</span>);
+      remaining = remaining.slice(strikeMatch[0].length);
+      continue;
+    }
+
+    // Plain text — consume until next special character
+    const nextSpecial = remaining.slice(1).search(/[*_`~!\[]/);
+    if (nextSpecial === -1) {
+      parts.push(remaining);
+      break;
+    } else {
+      parts.push(remaining.slice(0, nextSpecial + 1));
+      remaining = remaining.slice(nextSpecial + 1);
+    }
+  }
+
+  return parts.length === 1 && typeof parts[0] === "string" ? parts[0] : parts;
+}
+
+function renderMdCodeBlock(codeLines, lang, key) {
+  return (
+    <div key={key} style={{
+      background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 8,
+      padding: "12px 16px", margin: "8px 0", overflow: "auto", position: "relative",
+    }}>
+      {lang && lang !== "text" && (
+        <span style={{
+          position: "absolute", top: 6, right: 10,
+          fontSize: 9, color: T.txt3, fontFamily: T.fontMono,
+          textTransform: "uppercase", letterSpacing: 0.5,
+        }}>
+          {lang}
+        </span>
+      )}
+      <div style={{ fontFamily: T.fontMono, fontSize: 12, lineHeight: "20px" }}>
+        {codeLines.map((line, i) => {
+          const tokens = highlightLine(line, lang || "text");
+          return (
+            <div key={i} style={{ display: "flex", minHeight: 20 }}>
+              <span style={{
+                width: 32, minWidth: 32, textAlign: "right", paddingRight: 12,
+                color: T.txt3, fontSize: 11, userSelect: "none", flexShrink: 0, opacity: 0.5,
+              }}>
+                {i + 1}
+              </span>
+              <span style={{ whiteSpace: "pre", tabSize: 2 }}>
+                {tokens.map((tok, j) => (
+                  <span key={j} style={{ color: tok.color || T.txt, fontWeight: tok.bold ? 700 : 400 }}>{tok.text}</span>
+                ))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function renderMdTable(rows, key) {
+  if (rows.length === 0) return null;
+  const headerRow = rows[0];
+  const bodyRows = rows.slice(1);
+  return (
+    <table key={key} style={{
+      borderCollapse: "collapse", width: "100%", fontSize: 13,
+      margin: "8px 0", fontFamily: T.fontUI,
+    }}>
+      <thead>
+        <tr>
+          {headerRow.map((cell, i) => (
+            <th key={i} style={{
+              padding: "6px 12px", border: `1px solid ${T.border}`,
+              background: T.bg2, fontWeight: 700, color: T.txt, textAlign: "left",
+            }}>
+              {renderInline(cell)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {bodyRows.map((row, ri) => (
+          <tr key={ri}>
+            {row.map((cell, ci) => (
+              <td key={ci} style={{
+                padding: "6px 12px", border: `1px solid ${T.border}`,
+                background: ri % 2 === 0 ? T.bg1 : "transparent", color: T.txt,
+              }}>
+                {renderInline(cell)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function renderMdBlockquote(bqLines, key) {
+  return (
+    <div key={key} style={{
+      borderLeft: `3px solid ${T.purple}`, background: T.bg1,
+      padding: "10px 16px", margin: "8px 0", borderRadius: "0 6px 6px 0",
+    }}>
+      {bqLines.map((l, i) => (
+        <div key={i} style={{ color: T.txt2, fontStyle: "italic", lineHeight: 1.7 }}>
+          {renderInline(l)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderMdList(items, type, key) {
+  return (
+    <div key={key} style={{ margin: "8px 0", paddingLeft: 8 }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ display: "flex", gap: 8, lineHeight: 1.7, color: T.txt }}>
+          <span style={{ color: T.amber, fontWeight: 700, flexShrink: 0, fontFamily: T.fontMono, fontSize: 12, minWidth: 16, textAlign: "right" }}>
+            {type === "ol" ? `${i + 1}.` : "\u25CF"}
+          </span>
+          <span>{renderInline(item)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MarkdownPreview({ content }) {
+  const elements = useMemo(() => {
+    const mdLines = content.split("\n");
+    const result = [];
+    let i = 0;
+    let inCodeBlock = false;
+    let codeBlockLang = "";
+    let codeBlockLines = [];
+    let tableRows = [];
+    let listItems = [];
+    let listType = null; // "ul" | "ol"
+    let blockquoteLines = [];
+
+    function flushList() {
+      if (listItems.length > 0) {
+        result.push(renderMdList(listItems, listType, result.length));
+        listItems = [];
+        listType = null;
+      }
+    }
+    function flushBlockquote() {
+      if (blockquoteLines.length > 0) {
+        result.push(renderMdBlockquote(blockquoteLines, result.length));
+        blockquoteLines = [];
+      }
+    }
+    function flushTable() {
+      if (tableRows.length > 0) {
+        result.push(renderMdTable(tableRows, result.length));
+        tableRows = [];
+      }
+    }
+
+    while (i < mdLines.length) {
+      const line = mdLines[i];
+      const trimmed = line.trim();
+
+      // Code blocks: ```lang ... ```
+      if (trimmed.startsWith("```")) {
+        if (inCodeBlock) {
+          result.push(renderMdCodeBlock(codeBlockLines, codeBlockLang, result.length));
+          inCodeBlock = false;
+          codeBlockLines = [];
+        } else {
+          flushList(); flushBlockquote(); flushTable();
+          inCodeBlock = true;
+          codeBlockLang = trimmed.slice(3).trim() || "text";
+        }
+        i++; continue;
+      }
+      if (inCodeBlock) { codeBlockLines.push(line); i++; continue; }
+
+      // Blank line
+      if (!trimmed) {
+        flushList(); flushBlockquote(); flushTable();
+        result.push(<div key={result.length} style={{ height: 12 }} />);
+        i++; continue;
+      }
+
+      // Headings: # through ######
+      const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
+      if (headingMatch) {
+        flushList(); flushBlockquote(); flushTable();
+        const level = headingMatch[1].length;
+        const sizes = [28, 22, 18, 16, 14, 13];
+        result.push(
+          <div key={result.length} style={{
+            fontSize: sizes[level - 1], fontWeight: 700, color: T.txt,
+            marginTop: level <= 2 ? 24 : 16, marginBottom: 8,
+            paddingBottom: level <= 2 ? 8 : 0,
+            borderBottom: level <= 2 ? `1px solid ${T.border}` : "none",
+          }}>
+            {renderInline(headingMatch[2])}
+          </div>
+        );
+        i++; continue;
+      }
+
+      // Blockquotes: > text
+      if (trimmed.startsWith("> ") || trimmed === ">") {
+        flushList(); flushTable();
+        blockquoteLines.push(trimmed.slice(2) || "");
+        i++; continue;
+      }
+
+      // Unordered lists: - or * or +
+      if (/^[-*+]\s/.test(trimmed)) {
+        flushBlockquote(); flushTable();
+        if (listType !== "ul") { flushList(); listType = "ul"; }
+        listItems.push(trimmed.slice(2));
+        i++; continue;
+      }
+
+      // Ordered lists: 1. 2. etc
+      if (/^\d+\.\s/.test(trimmed)) {
+        flushBlockquote(); flushTable();
+        if (listType !== "ol") { flushList(); listType = "ol"; }
+        listItems.push(trimmed.replace(/^\d+\.\s/, ""));
+        i++; continue;
+      }
+
+      // Tables: | col1 | col2 |
+      if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+        flushList(); flushBlockquote();
+        // Skip separator rows (|---|---|)
+        if (/^\|[\s\-:|]+\|$/.test(trimmed)) { i++; continue; }
+        tableRows.push(trimmed.split("|").slice(1, -1).map(c => c.trim()));
+        i++; continue;
+      }
+
+      // Horizontal rules: --- or *** or ___
+      if (/^[-*_]{3,}$/.test(trimmed)) {
+        flushList(); flushBlockquote(); flushTable();
+        result.push(<hr key={result.length} style={{ border: "none", borderTop: `1px solid ${T.border}`, margin: "16px 0" }} />);
+        i++; continue;
+      }
+
+      // Checkbox list items: - [x] or - [ ]
+      const checkboxMatch = trimmed.match(/^[-*+]\s\[([ xX])\]\s(.+)/);
+      if (checkboxMatch) {
+        flushBlockquote(); flushTable();
+        if (listType !== "ul") { flushList(); listType = "ul"; }
+        const checked = checkboxMatch[1] !== " ";
+        listItems.push(
+          <span>
+            <span style={{ fontFamily: T.fontMono, color: checked ? T.green : T.txt3, marginRight: 6 }}>
+              {checked ? "\u2611" : "\u2610"}
+            </span>
+            {renderInline(checkboxMatch[2])}
+          </span>
+        );
+        i++; continue;
+      }
+
+      // Regular paragraph
+      flushList(); flushBlockquote(); flushTable();
+      result.push(
+        <p key={result.length} style={{ margin: "8px 0", lineHeight: 1.7, color: T.txt }}>
+          {renderInline(trimmed)}
+        </p>
+      );
+      i++;
+    }
+
+    // Flush remaining
+    flushList(); flushBlockquote(); flushTable();
+    if (inCodeBlock) result.push(renderMdCodeBlock(codeBlockLines, codeBlockLang, result.length));
+
+    return result;
+  }, [content]);
+
+  return (
+    <div style={{
+      padding: "24px 32px", fontFamily: T.fontUI, fontSize: 14, color: T.txt,
+      lineHeight: 1.7, maxWidth: 800, overflowY: "auto", height: "100%",
+    }}>
+      {elements}
+    </div>
+  );
+}
+
 // ── Main ScreenEditor ───────────────────────────────────────────────────────
 function ScreenEditor() {
   const {
@@ -396,6 +763,9 @@ function ScreenEditor() {
   const [findMatches, setFindMatches] = useState(0);
   const [findCurrent, setFindCurrent] = useState(0);
   const findInputRef = useRef(null);
+
+  // Markdown preview mode
+  const [mdPreviewMode, setMdPreviewMode] = useState("code"); // "code" | "split" | "preview"
 
   // ── Load tree when workingDir changes ─────────────────────────────────────
   useEffect(() => {
@@ -615,10 +985,17 @@ function ScreenEditor() {
         setTermOpen((p) => !p);
         return;
       }
+
+      // Cmd+Shift+P — cycle markdown preview mode
+      if (mod && e.shiftKey && e.key === "p" && isMarkdown) {
+        e.preventDefault();
+        setMdPreviewMode(prev => prev === "code" ? "split" : prev === "split" ? "preview" : "code");
+        return;
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSave, handleCloseTab, activeFile, openFiles, setActiveFile]);
+  }, [handleSave, handleCloseTab, activeFile, openFiles, setActiveFile, isMarkdown]);
 
   // ── File palette (⌘P): focus input when triggered ─────────────────────────
   const fileSearchRef = useRef(null);
@@ -819,6 +1196,7 @@ function ScreenEditor() {
     const parts = activeFile.split(".");
     return parts.length > 1 ? parts.pop().toLowerCase() : "ts";
   }, [activeFile]);
+  const isMarkdown = activeExt === "md";
   const lines = useMemo(() => activeContent.split("\n"), [activeContent]);
   const gutterWidth = useMemo(() => Math.max(String(lines.length).length * 9 + 16, 40), [lines.length]);
   const visibleLines = Math.floor(editorHeight / 20);
@@ -999,6 +1377,21 @@ function ScreenEditor() {
                       </span>
                     </React.Fragment>
                   ))}
+                  {isMarkdown && (
+                    <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
+                      {["code", "split", "preview"].map(mode => (
+                        <button key={mode} onClick={() => setMdPreviewMode(mode)}
+                          style={{
+                            padding: "2px 8px", fontSize: 10, fontFamily: T.fontUI, fontWeight: 600,
+                            border: `1px solid ${mdPreviewMode === mode ? T.blue : T.border}`,
+                            background: mdPreviewMode === mode ? `${T.blue}20` : T.bg3,
+                            color: mdPreviewMode === mode ? T.blue : T.txt2,
+                            borderRadius: 4, cursor: "pointer", textTransform: "capitalize",
+                          }}
+                        >{mode === "code" ? "\u2328 Code" : mode === "split" ? "\u2AF8 Split" : "\uD83D\uDC41 Preview"}</button>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ flex: 1 }} />
                   {activeModified && (
                     <Badge style={{ fontSize: 9, padding: "1px 6px" }}>Modified</Badge>
@@ -1048,80 +1441,139 @@ function ScreenEditor() {
                   </div>
                 )}
 
-                {/* Scrollable code area with overlaid textarea */}
-                <div
-                  ref={editorRef}
-                  style={{
+                {/* Scrollable content area — code editor or markdown preview */}
+                {isMarkdown && mdPreviewMode === "preview" ? (
+                  <div style={{
                     position: "absolute",
                     top: findOpen ? 60 : 28,
                     left: 0,
                     right: 0,
                     bottom: 0,
                     overflow: "auto",
-                  }}
-                >
-                  {/* Highlighted display layer */}
-                  <div style={{
-                    position: "relative",
-                    minHeight: "100%",
-                    padding: "4px 0",
+                    background: T.bg0,
                   }}>
-                    {lines.map((line, i) => (
-                      <CodeLine
-                        key={i}
-                        lineNum={i + 1}
-                        text={line}
-                        gutterWidth={gutterWidth}
-                        ext={activeExt}
-                      />
-                    ))}
+                    <MarkdownPreview content={activeContent} />
                   </div>
-
-                  {/* Transparent textarea overlay for editing */}
-                  <textarea
-                    value={activeContent}
-                    onChange={handleContentChange}
-                    onKeyDown={handleEditorKeyDown}
-                    spellCheck={false}
+                ) : isMarkdown && mdPreviewMode === "split" ? (
+                  <div style={{
+                    position: "absolute",
+                    top: findOpen ? 60 : 28,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: "flex",
+                    overflow: "hidden",
+                  }}>
+                    {/* Left: code editor */}
+                    <div
+                      ref={editorRef}
+                      style={{ flex: 1, overflow: "auto", position: "relative" }}
+                    >
+                      <div style={{ position: "relative", minHeight: "100%", padding: "4px 0" }}>
+                        {lines.map((line, i) => (
+                          <CodeLine key={i} lineNum={i + 1} text={line} gutterWidth={gutterWidth} ext={activeExt} />
+                        ))}
+                      </div>
+                      <textarea
+                        value={activeContent}
+                        onChange={handleContentChange}
+                        onKeyDown={handleEditorKeyDown}
+                        spellCheck={false}
+                        style={{
+                          position: "absolute", top: 0, left: gutterWidth, right: 0, bottom: 0,
+                          width: `calc(100% - ${gutterWidth}px)`, minHeight: "100%",
+                          padding: "4px 0", margin: 0, border: "none", outline: "none",
+                          background: "transparent", color: "transparent", caretColor: T.txt,
+                          fontSize: 13, fontFamily: T.fontMono, lineHeight: "20px", tabSize: 2,
+                          whiteSpace: "pre", resize: "none", overflowX: "auto", overflowY: "hidden",
+                          zIndex: 2, letterSpacing: "normal", wordSpacing: "normal",
+                        }}
+                      />
+                    </div>
+                    {/* Divider */}
+                    <div style={{ width: 1, background: T.border, flexShrink: 0 }} />
+                    {/* Right: preview */}
+                    <div style={{ flex: 1, overflow: "auto", background: T.bg0 }}>
+                      <MarkdownPreview content={activeContent} />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={editorRef}
                     style={{
                       position: "absolute",
-                      top: 0,
-                      left: gutterWidth,
+                      top: findOpen ? 60 : 28,
+                      left: 0,
                       right: 0,
                       bottom: 0,
-                      width: `calc(100% - ${gutterWidth}px)`,
+                      overflow: "auto",
+                    }}
+                  >
+                    {/* Highlighted display layer */}
+                    <div style={{
+                      position: "relative",
                       minHeight: "100%",
                       padding: "4px 0",
-                      margin: 0,
-                      border: "none",
-                      outline: "none",
-                      background: "transparent",
-                      color: "transparent",
-                      caretColor: T.txt,
-                      fontSize: 13,
-                      fontFamily: T.fontMono,
-                      lineHeight: "20px",
-                      tabSize: 2,
-                      whiteSpace: "pre",
-                      resize: "none",
-                      overflowX: "auto",
-                      overflowY: "hidden",
-                      zIndex: 2,
-                      letterSpacing: "normal",
-                      wordSpacing: "normal",
-                    }}
-                  />
-                </div>
+                    }}>
+                      {lines.map((line, i) => (
+                        <CodeLine
+                          key={i}
+                          lineNum={i + 1}
+                          text={line}
+                          gutterWidth={gutterWidth}
+                          ext={activeExt}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Transparent textarea overlay for editing */}
+                    <textarea
+                      value={activeContent}
+                      onChange={handleContentChange}
+                      onKeyDown={handleEditorKeyDown}
+                      spellCheck={false}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: gutterWidth,
+                        right: 0,
+                        bottom: 0,
+                        width: `calc(100% - ${gutterWidth}px)`,
+                        minHeight: "100%",
+                        padding: "4px 0",
+                        margin: 0,
+                        border: "none",
+                        outline: "none",
+                        background: "transparent",
+                        color: "transparent",
+                        caretColor: T.txt,
+                        fontSize: 13,
+                        fontFamily: T.fontMono,
+                        lineHeight: "20px",
+                        tabSize: 2,
+                        whiteSpace: "pre",
+                        resize: "none",
+                        overflowX: "auto",
+                        overflowY: "hidden",
+                        zIndex: 2,
+                        letterSpacing: "normal",
+                        wordSpacing: "normal",
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* Minimap */}
-              <Minimap
-                lines={lines}
-                scrollTop={scrollTop}
-                visibleLines={visibleLines}
-                totalHeight={totalHeight}
-                onSeek={handleMinimapSeek}
-              />
+              {/* Minimap — hidden in full preview mode */}
+              {!(isMarkdown && mdPreviewMode === "preview") && (
+                <Minimap
+                  lines={lines}
+                  scrollTop={scrollTop}
+                  visibleLines={visibleLines}
+                  totalHeight={totalHeight}
+                  onSeek={handleMinimapSeek}
+                />
+              )}
             </>
           )}
         </div>
