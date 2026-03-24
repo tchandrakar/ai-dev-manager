@@ -684,6 +684,10 @@ function ShinraApp({ initialTab, onNavigate }) {
       fullScan: index.fullScan,
       invalidateFile: index.invalidateFile,
       invalidateFiles: index.invalidateFiles,
+      // PSI indices (new — for go-to-definition)
+      fileIndex: index.fileIndex,
+      stubIndex: index.stubIndex,
+      importResolutionCache: index.importResolutionCache,
     }),
     [
       activeTab, setActiveTab,
@@ -699,6 +703,7 @@ function ShinraApp({ initialTab, onNavigate }) {
       index.fileList, index.fileSet, index.importGraph, index.functionMap,
       index.symbolIndex, index.routeIndex,
       index.fullScan, index.invalidateFile, index.invalidateFiles,
+      index.fileIndex, index.stubIndex, index.importResolutionCache,
     ]
   );
 

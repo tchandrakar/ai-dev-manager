@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { T } from "../tokens";
 import { Btn, PanelHeader, Badge, Input } from "../components";
 import { useShinra, highlightTS, highlightLine } from "./ShinraApp";
+import { resolveReference } from "./resolveReference";
 
 // ── File extension → icon / color mapping ───────────────────────────────────
 const EXT_META = {
@@ -216,6 +217,17 @@ function EditorTab({ filePath, isActive, onSelect, onClose, modified }) {
 }
 
 // ── CodeLine (extracted to avoid hooks-in-map) ──────────────────────────────
+// Helper: determine if a token is an identifier (for Cmd+hover underline)
+function isIdentifier(tok) {
+  return tok.color !== T.txt3       // not comment
+    && tok.color !== T.green        // not string
+    && tok.color !== T.amber        // not number
+    && tok.color !== T.txt2         // not operator/punctuation
+    && !tok.bold                    // not keyword
+    && /^[a-zA-Z_$]/.test(tok.text) // starts like an identifier
+    && tok.text.length >= 2;        // at least 2 chars
+}
+
 function CodeLine({ lineNum, text, gutterWidth, ext }) {
   const tokens = useMemo(() => highlightLine(text, ext || "ts"), [text, ext]);
 
@@ -236,7 +248,11 @@ function CodeLine({ lineNum, text, gutterWidth, ext }) {
       </span>
       <span style={{ flex: 1, whiteSpace: "pre", fontSize: 13, fontFamily: T.fontMono, tabSize: 2 }}>
         {tokens.map((tok, i) => (
-          <span key={i} style={{ color: tok.color || T.txt, fontWeight: tok.bold ? 700 : 400 }}>{tok.text}</span>
+          <span
+            key={i}
+            className={isIdentifier(tok) ? "shinra-token-id" : undefined}
+            style={{ color: tok.color || T.txt, fontWeight: tok.bold ? 700 : 400 }}
+          >{tok.text}</span>
         ))}
       </span>
     </div>
@@ -752,6 +768,7 @@ function ScreenEditor() {
     filePaletteOpen, setFilePaletteOpen,
     invalidateFile,
     symbolIndex, routeIndex,
+    fileIndex, stubIndex, importResolutionCache,
   } = useShinra();
 
   // File tree state
@@ -776,6 +793,7 @@ function ScreenEditor() {
 
   // Go-to-definition popup
   const [defPopup, setDefPopup] = useState(null); // { x, y, matches: [{file, line, name, type}] }
+  const [pendingGoToLine, setPendingGoToLine] = useState(null);
 
   // Editor scroll state
   const editorRef = useRef(null);
@@ -988,6 +1006,8 @@ function ScreenEditor() {
 
     if (!word || word.length < 2) return;
 
+    const clickedLine = getLineAtClick(e);
+
     // Check if it's an API path string (quoted string containing /api/)
     const fullLine = node.parentElement?.closest("[style]")?.textContent || "";
     const apiPathMatch = fullLine.match(/['"`]([^'"`]*\/api\/[^'"`]*)['"`]/);
@@ -1004,20 +1024,35 @@ function ScreenEditor() {
       }));
     }
 
+    // PSI reference resolution (scope-walking: import → file → project)
+    if (matches.length === 0 && fileIndex && stubIndex) {
+      const result = resolveReference(word, activeFile, clickedLine, fileIndex, stubIndex, importResolutionCache);
+      if (result) {
+        if (result.ambiguous) {
+          matches = result.candidates.map(c => ({
+            file: c.file, line: c.line, name: word,
+            type: c.kind || c.signature || "symbol",
+          }));
+        } else {
+          matches = [{ file: result.file, line: result.line, name: word, type: result.kind || "definition" }];
+        }
+      }
+    }
+
+    // Fallback: legacy symbol index (in case PSI indices aren't ready yet)
     if (matches.length === 0 && symbolIndex) {
-      // Same-language: look up symbol name
       const symbolMatches = symbolIndex.get(word) || [];
-      // Filter out the current file+line to avoid self-navigation
-      matches = symbolMatches.filter(s => !(s.file === activeFile && Math.abs(s.line - getLineAtClick(e)) < 3));
+      matches = symbolMatches.filter(s => !(s.file === activeFile && Math.abs(s.line - clickedLine) < 3));
     }
 
     if (matches.length === 0) return;
 
     if (matches.length === 1) {
-      // Direct navigation
+      // Direct navigation with scroll-to-line
       const m = matches[0];
       setOpenFiles(prev => prev.includes(m.file) ? prev : [...prev, m.file]);
       setActiveFile(m.file);
+      setPendingGoToLine(m.line);
       setDefPopup(null);
     } else {
       // Show popup with options
@@ -1028,7 +1063,7 @@ function ScreenEditor() {
         matches,
       });
     }
-  }, [symbolIndex, routeIndex, activeFile, setOpenFiles, setActiveFile, getLineAtClick]);
+  }, [fileIndex, stubIndex, importResolutionCache, symbolIndex, routeIndex, activeFile, setOpenFiles, setActiveFile, getLineAtClick]);
 
   // ── Save file (Cmd+S) ────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -1133,6 +1168,19 @@ function ScreenEditor() {
     const q = fileSearchQuery.toLowerCase();
     return paletteFiles.filter((fp) => fp.toLowerCase().includes(q));
   }, [paletteFiles, fileSearchQuery]);
+
+  // ── Scroll-to-line on cross-file navigation ────────────────────────────
+  useEffect(() => {
+    if (pendingGoToLine == null || !activeFile || !fileContents[activeFile]) return;
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      const targetY = (pendingGoToLine - 1) * 20;
+      const viewH = el.clientHeight;
+      el.scrollTo({ top: Math.max(0, targetY - viewH / 2 + 10), behavior: "smooth" });
+      setPendingGoToLine(null);
+    });
+  }, [pendingGoToLine, activeFile, fileContents]);
 
   // ── Track Cmd/Ctrl held for go-to-definition affordance ──────────────────
   useEffect(() => {
@@ -1633,6 +1681,11 @@ function ScreenEditor() {
                       overflow: "auto",
                     }}
                   >
+                    {/* Cmd+hover underline CSS (zero React re-renders) */}
+                    {cmdHeld && (
+                      <style>{`.shinra-token-id:hover { text-decoration: underline; cursor: pointer; color: ${T.blue} !important; }`}</style>
+                    )}
+
                     {/* Highlighted display layer */}
                     <div style={{
                       position: "relative",
@@ -1710,6 +1763,7 @@ function ScreenEditor() {
                           <DefPopupItem key={i} m={m} onNavigate={(m) => {
                             setOpenFiles(prev => prev.includes(m.file) ? prev : [...prev, m.file]);
                             setActiveFile(m.file);
+                            setPendingGoToLine(m.line);
                             setDefPopup(null);
                           }} />
                         ))}
