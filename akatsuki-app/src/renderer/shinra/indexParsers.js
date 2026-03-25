@@ -2,6 +2,8 @@
 // Extracted from ScreenDiagram.jsx and ScreenCallGraph.jsx into a shared module
 // used by useRepositoryIndex.js for unified, real-time indexing.
 
+import { PSI_KIND } from "./psiTypes";
+
 // ── Constants ────────────────────────────────────────────────────────────────
 export const IGNORED_DIRS = new Set([
   "node_modules", ".git", "dist", "build", ".next", "coverage",
@@ -656,8 +658,6 @@ function findBodyEnd(lines, startLine) {
 }
 
 // ── PSI Dispatcher ──────────────────────────────────────────────────────────
-import { PSI_KIND } from "./psiTypes";
-
 export function parseFilePsi(content, filePath) {
   if (filePath.endsWith(".go")) return parseFilePsiGo(content, filePath);
   if (filePath.endsWith(".dart")) return parseFilePsiDart(content, filePath);

@@ -295,6 +295,31 @@ function buildRouteIndex(fileIndex) {
   return routeIdx;
 }
 
+// ── Build route index from legacy functionMap (fallback) ────────────────────
+function buildRouteIndexLegacy(fm) {
+  const routeIdx = new Map();
+  for (const [, fn] of fm) {
+    const body = fn.body || "";
+    let rm;
+    const goRoutes = /\b(?:r|router|mux)\.(Get|Post|Put|Delete|Patch|Route)\s*\(\s*["'`]([^"'`]+)["'`]/g;
+    while ((rm = goRoutes.exec(body)) !== null) {
+      const method = rm[1].toUpperCase();
+      const path = rm[2].replace(/\{[^}]+\}/g, "{id}").replace(/:[a-zA-Z]+/g, "{id}");
+      if (!routeIdx.has(path)) routeIdx.set(path, []);
+      routeIdx.get(path).push({ file: fn.file, line: fn.startLine, method, handler: fn.name, type: "handler" });
+    }
+    const tsFetch = /(?:fetch|axios\.(?:get|post|put|delete|patch)|apiClient\.(?:get|post|put|delete|patch))\s*\(\s*[`"']([^`"']+)[`"']/g;
+    while ((rm = tsFetch.exec(body)) !== null) {
+      const path = rm[1].replace(/\$\{[^}]+\}/g, "{id}").replace(/\?.*$/, "");
+      if (!path.startsWith("/") && !path.startsWith("http")) continue;
+      const normalized = path.replace(/^https?:\/\/[^/]+/, "");
+      if (!routeIdx.has(normalized)) routeIdx.set(normalized, []);
+      routeIdx.get(normalized).push({ file: fn.file, line: fn.startLine, method: "CALL", handler: fn.name, type: "caller" });
+    }
+  }
+  return routeIdx;
+}
+
 // ── Derive legacy functionMap from PSI fileIndex ────────────────────────────
 function deriveFunctionMap(fileIndex) {
   const allFunctions = [];
@@ -368,13 +393,25 @@ export default function useRepositoryIndex(workingDir) {
       if (scanId !== scanIdRef.current) return;
 
       // Phase 3: Build PSI file index + stub index
-      const { fileIndex: fIdx, stubIndex: sIdx } = buildPsiIndices(contents, fSet, workingDir);
+      let fIdx = new Map(), sIdx = new Map(), psiOk = false;
+      try {
+        const result = buildPsiIndices(contents, fSet, workingDir);
+        fIdx = result.fileIndex;
+        sIdx = result.stubIndex;
+        psiOk = fIdx.size > 0;
+        console.log(`[Shinra PSI] Indexed ${fIdx.size} files, ${sIdx.size} symbols`);
+      } catch (psiErr) {
+        console.warn("[Shinra PSI] Failed, falling back to legacy indexing:", psiErr.message);
+      }
       if (scanId !== scanIdRef.current) return;
       setFileIndex(fIdx);
       setStubIndex(sIdx);
 
       // Phase 4: Build import resolution cache
-      const irc = buildImportResolutionCache(fIdx);
+      let irc = new Map();
+      if (psiOk) {
+        try { irc = buildImportResolutionCache(fIdx); } catch {}
+      }
       if (scanId !== scanIdRef.current) return;
       setImportResolutionCache(irc);
 
@@ -383,16 +420,27 @@ export default function useRepositoryIndex(workingDir) {
       if (scanId !== scanIdRef.current) return;
       setImportGraph(ig);
 
-      // Phase 6: Derive legacy functionMap + symbolIndex (backward compat)
-      const fm = deriveFunctionMap(fIdx);
+      // Phase 6: Build function map + symbol index
+      let fm, symbolIdx;
+      if (psiOk) {
+        // Derive from PSI (richer — includes classes, types, etc.)
+        fm = deriveFunctionMap(fIdx);
+        symbolIdx = deriveLegacySymbolIndex(sIdx);
+      } else {
+        // Fallback: legacy regex-only function parsing
+        fm = buildFunctionIndex(contents);
+        symbolIdx = new Map();
+        for (const [key, fn] of fm) {
+          if (!symbolIdx.has(fn.name)) symbolIdx.set(fn.name, []);
+          symbolIdx.get(fn.name).push({ file: fn.file, line: fn.startLine, name: fn.name, type: fn.type, key });
+        }
+      }
       if (scanId !== scanIdRef.current) return;
       setFunctionMap(fm);
-
-      const symbolIdx = deriveLegacySymbolIndex(sIdx);
       setSymbolIndex(symbolIdx);
 
-      // Phase 7: Build route index from PSI elements
-      const routeIdx = buildRouteIndex(fIdx);
+      // Phase 7: Build route index
+      const routeIdx = psiOk ? buildRouteIndex(fIdx) : buildRouteIndexLegacy(fm);
       setRouteIndex(routeIdx);
 
       setStatus("ready");
