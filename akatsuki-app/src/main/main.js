@@ -183,7 +183,15 @@ function createWindow() {
     backgroundColor: "#070B14",
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
   });
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) { mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL); }
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    // Retry on connection refused — Vite dev server may not be ready yet
+    const loadWithRetry = (attempt = 0) => {
+      mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL).catch(() => {
+        if (attempt < 15) setTimeout(() => loadWithRetry(attempt + 1), 800);
+      });
+    };
+    loadWithRetry();
+  }
   else { mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)); }
 }
 
